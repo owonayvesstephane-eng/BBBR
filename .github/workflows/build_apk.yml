@@ -1,0 +1,103 @@
+name: Compiler BATIX APK & ZIP
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch: # Permet de lancer la compilation en 1 clic sur GitHub
+
+jobs:
+  build-android-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. Récupération des fichiers du dépôt
+        uses: actions/checkout@v4
+
+      - name: 2. Installation de Flutter sur GitHub
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: 3. Génération automatique de tous les fichiers Android/Flutter
+        run: |
+          # Sauvegarde votre code main.dart et le logo
+          mkdir -p /tmp/batix_backup
+          cp lib/main.dart /tmp/batix_backup/main.dart
+          if [ -f "assets/logo.png" ]; then
+            cp assets/logo.png /tmp/batix_backup/logo.png
+          fi
+
+          # Génère toute l'arborescence officielle Flutter Android
+          flutter create --platforms=android --org com.batix.platform --project-name batix_app .
+
+          # Restaure votre code BATIX et le logo
+          mkdir -p assets
+          cp /tmp/batix_backup/main.dart lib/main.dart
+          if [ -f "/tmp/batix_backup/logo.png" ]; then
+            cp /tmp/batix_backup/logo.png assets/logo.png
+          else
+            # Crée un logo valide par défaut si vous n'avez pas encore uploadé assets/logo.png
+            echo "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" | base64 -d > assets/logo.png
+          fi
+
+      - name: 4. Configuration de pubspec.yaml et des permissions Caméra/GPS
+        run: |
+          cat << 'EOF' > pubspec.yaml
+          name: batix_app
+          description: BATIX - L'approvisionnement intelligent de vos chantiers.
+          publish_to: 'none'
+          version: 1.0.0+1
+
+          environment:
+            sdk: '>=3.0.0 <4.0.0'
+
+          dependencies:
+            flutter:
+              sdk: flutter
+            image_picker: ^1.0.7
+
+          dev_dependencies:
+            flutter_test:
+              sdk: flutter
+            flutter_launcher_icons: ^0.13.1
+
+          flutter_launcher_icons:
+            android: "launcher_icon"
+            image_path: "assets/logo.png"
+            adaptive_icon_background: "#08121E"
+            adaptive_icon_foreground: "assets/logo.png"
+
+          flutter:
+            uses-material-design: true
+            assets:
+              - assets/logo.png
+          EOF
+
+          # Ajout des permissions Caméra directe et GPS dans AndroidManifest.xml
+          sed -i 's/<application/<uses-permission android:name="android.permission.CAMERA" \/>\n    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" \/>\n    <application/g' android/app/src/main/AndroidManifest.xml
+          sed -i 's/android:label="batix_app"/android:label="BATIX"/g' android/app/src/main/AndroidManifest.xml
+
+      - name: 5. Téléchargement des packages & Génération de l'icône BATIX
+        run: |
+          flutter pub get
+          if [ -f "/tmp/batix_backup/logo.png" ]; then
+            dart run flutter_launcher_icons
+          fi
+
+      - name: 6. Compilation du fichier APK final
+        run: flutter build apk --release
+
+      - name: 7. Création du fichier ZIP complet du projet
+        run: zip -r BATIX_Projet_Complet.zip . -x "build/*" ".git/*" ".dart_tool/*"
+
+      - name: 8. Téléchargement de l'application APK prête à installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: BATIX-Application-APK
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+      - name: 9. Téléchargement du fichier ZIP complet du projet
+        uses: actions/upload-artifact@v4
+        with:
+          name: BATIX-Code-Source-Complet-ZIP
+          path: BATIX_Projet_Complet.zip
