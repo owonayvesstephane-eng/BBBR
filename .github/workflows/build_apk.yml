@@ -3,46 +3,51 @@ name: Compiler BATIX APK & ZIP
 on:
   push:
     branches: [ "main", "master" ]
-  workflow_dispatch: # Permet de lancer la compilation en 1 clic sur GitHub
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build-android-apk:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 1. Récupération des fichiers du dépôt
+      - name: 1. Récupération du dépôt
         uses: actions/checkout@v4
 
-      - name: 2. Installation de Flutter sur GitHub
-        uses: subosito/flutter-action@v2
-        with:
-          channel: 'stable'
-
-      - name: 3. Génération automatique de tous les fichiers Android/Flutter
+      - name: 2. Installation rapide de Flutter & Java 17
         run: |
-          # Sauvegarde votre code main.dart et le logo
-          mkdir -p /tmp/batix_backup
-          cp lib/main.dart /tmp/batix_backup/main.dart
+          export JAVA_HOME=$JAVA_HOME_17_X64
+          echo "JAVA_HOME=$JAVA_HOME_17_X64" >> $GITHUB_ENV
+          git clone https://github.com/flutter/flutter.git -b stable --depth 1 $HOME/flutter
+          echo "$HOME/flutter/bin" >> $GITHUB_PATH
+
+      - name: 3. Création du projet Flutter BATIX complet
+        run: |
+          rm -rf batix_app
+          flutter create --platforms=android --org com.batix.platform --project-name batix_app batix_app
+          mkdir -p batix_app/assets
+
+          # Si vous avez mis logo.png dans le dépôt, on l'utilise, sinon on génère un logo 256x256 valide
           if [ -f "assets/logo.png" ]; then
-            cp assets/logo.png /tmp/batix_backup/logo.png
-          fi
-
-          # Génère toute l'arborescence officielle Flutter Android
-          flutter create --platforms=android --org com.batix.platform --project-name batix_app .
-
-          # Restaure votre code BATIX et le logo
-          mkdir -p assets
-          cp /tmp/batix_backup/main.dart lib/main.dart
-          if [ -f "/tmp/batix_backup/logo.png" ]; then
-            cp /tmp/batix_backup/logo.png assets/logo.png
+            cp assets/logo.png batix_app/assets/logo.png
+          elif [ -f "logo.png" ]; then
+            cp logo.png batix_app/assets/logo.png
           else
-            # Crée un logo valide par défaut si vous n'avez pas encore uploadé assets/logo.png
-            echo "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" | base64 -d > assets/logo.png
+            python3 -c '
+          import zlib, struct
+          w, h = 256, 256
+          raw = b"".join(b"\x00" + b"\x00\xa8\x59" * w for _ in range(h))
+          def ck(t, d): return struct.pack("!I", len(d)) + t + d + struct.pack("!I", zlib.crc32(t + d) & 0xffffffff)
+          png = b"\x89PNG\r\n\x1a\n" + ck(b"IHDR", struct.pack("!IIBBBBB", w, h, 8, 2, 0, 0, 0)) + ck(b"IDAT", zlib.compress(raw, 9)) + ck(b"IEND", b"")
+          open("batix_app/assets/logo.png", "wb").write(png)
+          '
           fi
 
-      - name: 4. Configuration de pubspec.yaml et des permissions Caméra/GPS
+      - name: 4. Écriture de pubspec.yaml et des permissions Android
         run: |
-          cat << 'EOF' > pubspec.yaml
+          cat << 'EOF' > batix_app/pubspec.yaml
           name: batix_app
           description: BATIX - L'approvisionnement intelligent de vos chantiers.
           publish_to: 'none'
@@ -73,30 +78,1294 @@ jobs:
               - assets/logo.png
           EOF
 
-          # Ajout des permissions Caméra directe et GPS dans AndroidManifest.xml
-          sed -i 's/<application/<uses-permission android:name="android.permission.CAMERA" \/>\n    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" \/>\n    <application/g' android/app/src/main/AndroidManifest.xml
-          sed -i 's/android:label="batix_app"/android:label="BATIX"/g' android/app/src/main/AndroidManifest.xml
+          sed -i 's/<application/<uses-permission android:name="android.permission.CAMERA" \/>\n    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" \/>\n    <application/g' batix_app/android/app/src/main/AndroidManifest.xml
+          sed -i 's/android:label="batix_app"/android:label="BATIX"/g' batix_app/android/app/src/main/AndroidManifest.xml
 
-      - name: 5. Téléchargement des packages & Génération de l'icône BATIX
+      - name: 5. Injection automatique du code complet BATIX (lib/main.dart)
+        run: |
+          cat << 'EOF' > batix_app/lib/main.dart
+          import 'dart:math';
+          import 'package:flutter/material.dart';
+          import 'package:image_picker/image_picker.dart';
+
+          void main() {
+            runApp(const BatixApp());
+          }
+
+          class BatixColors {
+            static const Color bgDark = Color(0xFF08121E);
+            static const Color bgCard = Color(0xFF102132);
+            static const Color border = Color(0xFF1E3A56);
+            static const Color green = Color(0xFF00A859);
+            static const Color greenLight = Color(0xFF10B981);
+            static const Color orange = Color(0xFFFF8C00);
+            static const Color orangeLight = Color(0xFFFFB300);
+
+            static const LinearGradient orangeGradient = LinearGradient(
+              colors: [Color(0xFFFF7A00), Color(0xFFFFAE00)],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            );
+
+            static const LinearGradient greenGradient = LinearGradient(
+              colors: [Color(0xFF008F4C), Color(0xFF10B981)],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            );
+
+            static const LinearGradient darkBackgroundGradient = LinearGradient(
+              colors: [Color(0xFF0A1929), Color(0xFF06101A), Color(0xFF0A221E)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            );
+          }
+
+          class OrderModel {
+            final String id;
+            final String productName;
+            final String supplierName;
+            final int unitPrice;
+            final int deliveryFee;
+            final int quantity;
+            final String destination;
+            final String secretCode;
+            String status;
+            String? photo1Matricule;
+            String? photo2Cargaison;
+            String? photo3Sol;
+            bool isSigned;
+
+            OrderModel({
+              required this.id,
+              required this.productName,
+              required this.supplierName,
+              required this.unitPrice,
+              required this.deliveryFee,
+              required this.quantity,
+              required this.destination,
+              required this.secretCode,
+              this.status = 'En cours',
+              this.photo1Matricule,
+              this.photo2Cargaison,
+              this.photo3Sol,
+              this.isSigned = false,
+            });
+
+            int get totalMaterials => unitPrice * quantity;
+            int get grandTotal => totalMaterials + deliveryFee;
+          }
+
+          class AppDatabase {
+            static final List<OrderModel> orders = [
+              OrderModel(
+                id: 'CMD-2026-00124',
+                productName: 'Ciment 50kg (CPJ 42.5)',
+                supplierName: 'Fournisseur B (Dépôt Central)',
+                unitPrice: 4900,
+                deliveryFee: 15000,
+                quantity: 50,
+                destination: 'Chantier Odza (Derrière Tradex)',
+                secretCode: '8419',
+              ),
+            ];
+
+            static final List<Map<String, dynamic>> products = [
+              {
+                'name': 'Ciment 50kg',
+                'subtitle': 'Haute qualité • CPJ 42.5 / Robuste',
+                'category': 'Ciment',
+                'unit': 'sac',
+                'icon': Icons.foundation,
+                'suppliers': [
+                  {'name': 'Fournisseur A', 'price': 5000, 'delivery': 15000, 'delay': '24h', 'rating': 4.7, 'stock': 600},
+                  {'name': 'Fournisseur B', 'price': 4900, 'delivery': 15000, 'delay': '24h', 'rating': 4.8, 'stock': 450},
+                  {'name': 'Fournisseur C', 'price': 5100, 'delivery': 10000, 'delay': 'Express 6h', 'rating': 4.9, 'stock': 1200},
+                  {'name': 'Fournisseur D', 'price': 4850, 'delivery': 20000, 'delay': '48h', 'rating': 4.4, 'stock': 300},
+                ],
+              },
+              {
+                'name': 'Fer à béton 12mm',
+                'subtitle': 'Acier haute résistance • FeE500',
+                'category': 'Fer à béton',
+                'unit': 'barre',
+                'icon': Icons.linear_scale,
+                'suppliers': [
+                  {'name': 'Fournisseur A', 'price': 6800, 'delivery': 15000, 'delay': '24h', 'rating': 4.7, 'stock': 500},
+                  {'name': 'Fournisseur B', 'price': 6650, 'delivery': 18000, 'delay': '24h', 'rating': 4.6, 'stock': 800},
+                  {'name': 'Fournisseur C', 'price': 6900, 'delivery': 12000, 'delay': 'Express 12h', 'rating': 4.8, 'stock': 350},
+                ],
+              },
+              {
+                'name': 'Gravier 5/15 ou 15/25',
+                'subtitle': 'Granulats de carrière concassés',
+                'category': 'Gravier',
+                'unit': 'm³',
+                'icon': Icons.landscape,
+                'suppliers': [
+                  {'name': 'Fournisseur A', 'price': 4200, 'delivery': 25000, 'delay': '24h', 'rating': 4.8, 'stock': 200},
+                  {'name': 'Fournisseur B', 'price': 4000, 'delivery': 28000, 'delay': '48h', 'rating': 4.5, 'stock': 150},
+                  {'name': 'Fournisseur E', 'price': 4150, 'delivery': 22000, 'delay': '24h', 'rating': 4.7, 'stock': 400},
+                ],
+              },
+              {
+                'name': 'Bois de coffrage',
+                'subtitle': 'Planche épaisseur 25mm • Traitée',
+                'category': 'Bois',
+                'unit': 'm²',
+                'icon': Icons.forest,
+                'suppliers': [
+                  {'name': 'Fournisseur A', 'price': 12000, 'delivery': 15000, 'delay': '24h', 'rating': 4.6, 'stock': 120},
+                  {'name': 'Fournisseur B', 'price': 11500, 'delivery': 15000, 'delay': '24h', 'rating': 4.8, 'stock': 300},
+                ],
+              },
+              {
+                'name': 'Parpaings 15cm / 20cm',
+                'subtitle': 'Agglos vibrés haute densité',
+                'category': 'Brique',
+                'unit': 'pièce',
+                'icon': Icons.grid_view_rounded,
+                'suppliers': [
+                  {'name': 'Fournisseur A', 'price': 350, 'delivery': 20000, 'delay': '24h', 'rating': 4.7, 'stock': 5000},
+                  {'name': 'Fournisseur B', 'price': 325, 'delivery': 22000, 'delay': '48h', 'rating': 4.5, 'stock': 8000},
+                ],
+              },
+            ];
+          }
+
+          class BatixApp extends StatelessWidget {
+            const BatixApp({super.key});
+
+            @override
+            Widget build(BuildContext context) {
+              return MaterialApp(
+                title: 'BATIX',
+                debugShowCheckedModeBanner: false,
+                theme: ThemeData(
+                  brightness: Brightness.dark,
+                  scaffoldBackgroundColor: BatixColors.bgDark,
+                  primaryColor: BatixColors.green,
+                  fontFamily: 'Roboto',
+                ),
+                home: const OnboardingScreen(),
+              );
+            }
+          }
+
+          class BatixLogoHeader extends StatelessWidget {
+            final double size;
+            final bool showTagline;
+            final bool darkText;
+
+            const BatixLogoHeader({
+              super.key,
+              this.size = 70,
+              this.showTagline = true,
+              this.darkText = false,
+            });
+
+            @override
+            Widget build(BuildContext context) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: size,
+                    height: size,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: const LinearGradient(
+                        colors: [BatixColors.green, Color(0xFF053824)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      border: Border.all(color: BatixColors.orange, width: 2.5),
+                    ),
+                    child: ClipOval(
+                      child: Image.asset(
+                        'assets/logo.png',
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Icon(
+                          Icons.local_shipping_rounded,
+                          size: size * 0.55,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  RichText(
+                    text: TextSpan(
+                      style: TextStyle(
+                        fontSize: size * 0.42,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1.5,
+                      ),
+                      children: [
+                        TextSpan(
+                          text: 'BATI',
+                          style: TextStyle(color: darkText ? const Color(0xFF0A2239) : Colors.white),
+                        ),
+                        const TextSpan(
+                          text: 'X',
+                          style: TextStyle(color: BatixColors.orange),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (showTagline) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      "L'approvisionnement intelligent\nde vos chantiers.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: darkText ? Colors.black87 : Colors.white70,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ],
+              );
+            }
+          }
+
+          class OnboardingScreen extends StatelessWidget {
+            const OnboardingScreen({super.key});
+
+            @override
+            Widget build(BuildContext context) {
+              return Scaffold(
+                body: Container(
+                  width: double.infinity,
+                  decoration: const BoxDecoration(gradient: BatixColors.darkBackgroundGradient),
+                  child: SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 20),
+                          const BatixLogoHeader(size: 95, showTagline: true),
+                          const Spacer(),
+                          Container(
+                            height: 210,
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(24),
+                              gradient: LinearGradient(
+                                colors: [
+                                  BatixColors.orange.withOpacity(0.25),
+                                  BatixColors.green.withOpacity(0.25),
+                                ],
+                              ),
+                              border: Border.all(color: BatixColors.border, width: 1.5),
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: const [
+                                Icon(Icons.local_shipping_rounded, size: 86, color: BatixColors.orangeLight),
+                                SizedBox(height: 12),
+                                Text(
+                                  'Votre partenaire logistique BTP de confiance',
+                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Spacer(),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: const [
+                              _FeatureBadge(icon: Icons.widgets_rounded, label: 'Matériaux\nBTP'),
+                              _FeatureBadge(icon: Icons.bolt_rounded, label: 'Livraison\nrapide'),
+                              _FeatureBadge(icon: Icons.verified_user_rounded, label: 'Partenaires\nfiables'),
+                            ],
+                          ),
+                          const SizedBox(height: 28),
+                          GestureDetector(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const WelcomeAuthScreen()),
+                              );
+                            },
+                            child: Container(
+                              width: double.infinity,
+                              height: 56,
+                              decoration: BoxDecoration(
+                                gradient: BatixColors.orangeGradient,
+                                borderRadius: BorderRadius.circular(30),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: const [
+                                  Text(
+                                    'Commencer',
+                                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                                  ),
+                                  SizedBox(width: 10),
+                                  Icon(Icons.arrow_forward_rounded, color: Colors.white),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }
+          }
+
+          class _FeatureBadge extends StatelessWidget {
+            final IconData icon;
+            final String label;
+            const _FeatureBadge({required this.icon, required this.label});
+
+            @override
+            Widget build(BuildContext context) {
+              return Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: BatixColors.green.withOpacity(0.15),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: BatixColors.green),
+                    ),
+                    child: Icon(icon, color: BatixColors.greenLight, size: 24),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.white70)),
+                ],
+              );
+            }
+          }
+
+          class WelcomeAuthScreen extends StatelessWidget {
+            const WelcomeAuthScreen({super.key});
+
+            void _goToProfileChoice(BuildContext context, String mode) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => ProfileSelectionScreen(authMode: mode)),
+              );
+            }
+
+            @override
+            Widget build(BuildContext context) {
+              return Scaffold(
+                body: Container(
+                  width: double.infinity,
+                  decoration: const BoxDecoration(gradient: BatixColors.darkBackgroundGradient),
+                  child: SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        children: [
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: IconButton(
+                              icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+                              onPressed: () => Navigator.pop(context),
+                            ),
+                          ),
+                          const BatixLogoHeader(size: 80, showTagline: false),
+                          const SizedBox(height: 24),
+                          const Text(
+                            'Bienvenue sur BATIX',
+                            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Connectez-vous ou créez votre compte\npour accéder à tous les services.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.white70, fontSize: 14),
+                          ),
+                          const SizedBox(height: 36),
+                          _AuthOptionButton(
+                            icon: Icons.person_add_alt_1_rounded,
+                            label: "S'inscrire",
+                            gradient: BatixColors.orangeGradient,
+                            textColor: Colors.white,
+                            onTap: () => _goToProfileChoice(context, 'inscription'),
+                          ),
+                          const SizedBox(height: 16),
+                          _AuthOptionButton(
+                            icon: Icons.login_rounded,
+                            label: 'Se connecter',
+                            bgColor: BatixColors.bgCard,
+                            borderColor: BatixColors.greenLight,
+                            textColor: Colors.white,
+                            onTap: () => _goToProfileChoice(context, 'connexion'),
+                          ),
+                          const SizedBox(height: 16),
+                          _AuthOptionButton(
+                            icon: Icons.play_circle_outline_rounded,
+                            label: 'Mode démo',
+                            bgColor: Colors.white,
+                            textColor: BatixColors.bgDark,
+                            onTap: () => _goToProfileChoice(context, 'demo'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }
+          }
+
+          class _AuthOptionButton extends StatelessWidget {
+            final IconData icon;
+            final String label;
+            final LinearGradient? gradient;
+            final Color? bgColor;
+            final Color? borderColor;
+            final Color textColor;
+            final VoidCallback onTap;
+
+            const _AuthOptionButton({
+              required this.icon,
+              required this.label,
+              this.gradient,
+              this.bgColor,
+              this.borderColor,
+              required this.textColor,
+              required this.onTap,
+            });
+
+            @override
+            Widget build(BuildContext context) {
+              return GestureDetector(
+                onTap: onTap,
+                child: Container(
+                  height: 56,
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  decoration: BoxDecoration(
+                    gradient: gradient,
+                    color: bgColor,
+                    borderRadius: BorderRadius.circular(30),
+                    border: borderColor != null ? Border.all(color: borderColor!, width: 1.5) : null,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(icon, color: textColor, size: 26),
+                      const Expanded(child: SizedBox()),
+                      Text(label, style: TextStyle(color: textColor, fontSize: 17, fontWeight: FontWeight.bold)),
+                      const Expanded(child: SizedBox()),
+                      Icon(Icons.chevron_right_rounded, color: textColor),
+                    ],
+                  ),
+                ),
+              );
+            }
+          }
+
+          class ProfileSelectionScreen extends StatelessWidget {
+            final String authMode;
+            const ProfileSelectionScreen({super.key, required this.authMode});
+
+            void _selectRole(BuildContext context, String roleTitle, String roleKey) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => LoginScreen(roleTitle: roleTitle, roleKey: roleKey, authMode: authMode),
+                ),
+              );
+            }
+
+            @override
+            Widget build(BuildContext context) {
+              return Scaffold(
+                body: Container(
+                  decoration: const BoxDecoration(gradient: BatixColors.darkBackgroundGradient),
+                  child: SafeArea(
+                    child: ListView(
+                      padding: const EdgeInsets.all(20),
+                      children: [
+                        Row(
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+                              onPressed: () => Navigator.pop(context),
+                            ),
+                            const Expanded(
+                              child: Text(
+                                'BATIX • Choix du profil',
+                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'En tant que quoi souhaitez-vous vous inscrire / connecter ?',
+                          style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                        const SizedBox(height: 18),
+                        _ProfileRoleCard(
+                          number: '1. Client (Acheteur BTP)',
+                          description: 'Catalogue style Alibaba, comparaison des Fournisseurs A, B, C, D et code secret.',
+                          icon: Icons.shopping_cart_checkout_rounded,
+                          accentColor: BatixColors.greenLight,
+                          onTap: () => _selectRole(context, 'Espace Client BTP', 'client'),
+                        ),
+                        _ProfileRoleCard(
+                          number: '2. Fournisseur',
+                          description: 'Publier vos matériaux et tarifs et recevoir les notifications de commandes.',
+                          icon: Icons.factory_rounded,
+                          accentColor: BatixColors.orange,
+                          onTap: () => _selectRole(context, 'Espace Fournisseur', 'fournisseur'),
+                        ),
+                        _ProfileRoleCard(
+                          number: '3. Transporteur / Livreur',
+                          description: 'Suivre le GPS, filmer avec la caméra directe les 3 preuves et faire signer avec le code secret.',
+                          icon: Icons.local_shipping_rounded,
+                          accentColor: Colors.lightBlueAccent,
+                          onTap: () => _selectRole(context, 'Espace Livraison', 'transporteur'),
+                        ),
+                        _ProfileRoleCard(
+                          number: '4. Agent de BATIX',
+                          description: 'Superviser les inscriptions, auditer les preuves et contrôler les paiements.',
+                          icon: Icons.shield_rounded,
+                          accentColor: Colors.purpleAccent,
+                          onTap: () => _selectRole(context, 'Console Agent BATIX', 'agent'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }
+          }
+
+          class _ProfileRoleCard extends StatelessWidget {
+            final String number;
+            final String description;
+            final IconData icon;
+            final Color accentColor;
+            final VoidCallback onTap;
+
+            const _ProfileRoleCard({
+              required this.number,
+              required this.description,
+              required this.icon,
+              required this.accentColor,
+              required this.onTap,
+            });
+
+            @override
+            Widget build(BuildContext context) {
+              return GestureDetector(
+                onTap: onTap,
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 14),
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: BatixColors.bgCard,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: accentColor.withOpacity(0.5), width: 1.5),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(icon, color: accentColor, size: 28),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(number, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                          ),
+                          Icon(Icons.arrow_forward_ios_rounded, color: accentColor, size: 16),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(description, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                    ],
+                  ),
+                ),
+              );
+            }
+          }
+
+          class LoginScreen extends StatefulWidget {
+            final String roleTitle;
+            final String roleKey;
+            final String authMode;
+
+            const LoginScreen({
+              super.key,
+              required this.roleTitle,
+              required this.roleKey,
+              required this.authMode,
+            });
+
+            @override
+            State<LoginScreen> createState() => _LoginScreenState();
+          }
+
+          class _LoginScreenState extends State<LoginScreen> {
+            final TextEditingController _emailCtrl = TextEditingController(text: 'utilisateur@batix.com');
+            final TextEditingController _passCtrl = TextEditingController(text: '12345678');
+
+            void _submit() {
+              if (widget.roleKey == 'client') {
+                Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ClientMainScreen()));
+              } else if (widget.roleKey == 'transporteur') {
+                Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const TransporterDashboardScreen()));
+              } else {
+                Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ClientMainScreen()));
+              }
+            }
+
+            @override
+            Widget build(BuildContext context) {
+              return Scaffold(
+                body: Container(
+                  decoration: const BoxDecoration(gradient: BatixColors.darkBackgroundGradient),
+                  child: SafeArea(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        children: [
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: IconButton(
+                              icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+                              onPressed: () => Navigator.pop(context),
+                            ),
+                          ),
+                          const BatixLogoHeader(size: 70, showTagline: true),
+                          const SizedBox(height: 24),
+                          Container(
+                            padding: const EdgeInsets.all(22),
+                            decoration: BoxDecoration(
+                              color: BatixColors.bgCard,
+                              borderRadius: BorderRadius.circular(24),
+                              border: Border.all(color: BatixColors.border),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(widget.roleTitle, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.bold)),
+                                const SizedBox(height: 18),
+                                TextField(
+                                  controller: _emailCtrl,
+                                  decoration: const InputDecoration(
+                                    prefixIcon: Icon(Icons.email_outlined),
+                                    hintText: 'Adresse e-mail ou téléphone',
+                                  ),
+                                ),
+                                const SizedBox(height: 14),
+                                TextField(
+                                  controller: _passCtrl,
+                                  obscureText: true,
+                                  decoration: const InputDecoration(
+                                    prefixIcon: Icon(Icons.lock_outline),
+                                    hintText: 'Mot de passe',
+                                  ),
+                                ),
+                                const SizedBox(height: 22),
+                                GestureDetector(
+                                  onTap: _submit,
+                                  child: Container(
+                                    width: double.infinity,
+                                    height: 52,
+                                    decoration: BoxDecoration(
+                                      gradient: BatixColors.orangeGradient,
+                                      borderRadius: BorderRadius.circular(28),
+                                    ),
+                                    child: const Center(
+                                      child: Text(
+                                        '→   Continuer',
+                                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }
+          }
+
+          class ClientMainScreen extends StatefulWidget {
+            const ClientMainScreen({super.key});
+
+            @override
+            State<ClientMainScreen> createState() => _ClientMainScreenState();
+          }
+
+          class _ClientMainScreenState extends State<ClientMainScreen> {
+            int _selectedIndex = 0;
+            String _searchQuery = '';
+            String _selectedCategory = 'Tous';
+            final List<String> _categories = ['Tous', 'Ciment', 'Fer à béton', 'Gravier', 'Bois', 'Brique'];
+
+            @override
+            Widget build(BuildContext context) {
+              final filteredProducts = AppDatabase.products.where((p) {
+                final matchesCategory = _selectedCategory == 'Tous' || p['category'] == _selectedCategory;
+                final matchesSearch = p['name'].toString().toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                    p['category'].toString().toLowerCase().contains(_searchQuery.toLowerCase());
+                return matchesCategory && matchesSearch;
+              }).toList();
+
+              return Scaffold(
+                backgroundColor: const Color(0xFFF4F7FA),
+                appBar: AppBar(
+                  backgroundColor: Colors.white,
+                  elevation: 0.5,
+                  title: const BatixLogoHeader(size: 32, showTagline: false, darkText: true),
+                  actions: [
+                    TextButton.icon(
+                      onPressed: () {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(builder: (_) => const TransporterDashboardScreen()),
+                        );
+                      },
+                      icon: const Icon(Icons.local_shipping_rounded, color: BatixColors.orange),
+                      label: const Text('Mode Livreur', style: TextStyle(color: BatixColors.orange, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+                body: _selectedIndex == 0
+                    ? _buildAlibabaCatalog(filteredProducts)
+                    : _buildClientOrdersList(),
+                bottomNavigationBar: BottomNavigationBar(
+                  backgroundColor: Colors.white,
+                  selectedItemColor: BatixColors.green,
+                  unselectedItemColor: Colors.blueGrey,
+                  currentIndex: _selectedIndex,
+                  onTap: (idx) => setState(() => _selectedIndex = idx),
+                  items: const [
+                    BottomNavigationBarItem(icon: Icon(Icons.manage_search_rounded), label: 'Catalogue Alibaba'),
+                    BottomNavigationBarItem(icon: Icon(Icons.receipt_long_rounded), label: 'Mes Commandes & Code'),
+                  ],
+                ),
+              );
+            }
+
+            Widget _buildAlibabaCatalog(List<Map<String, dynamic>> products) {
+              return Column(
+                children: [
+                  Container(
+                    color: Colors.white,
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+                    child: Column(
+                      children: [
+                        TextField(
+                          style: const TextStyle(color: Colors.black87),
+                          onChanged: (v) => setState(() => _searchQuery = v),
+                          decoration: InputDecoration(
+                            hintText: 'Rechercher (ex: Ciment, Fer, Gravier...)',
+                            hintStyle: const TextStyle(color: Colors.black45, fontSize: 14),
+                            prefixIcon: const Icon(Icons.search_rounded, color: BatixColors.green),
+                            filled: true,
+                            fillColor: const Color(0xFFF0F4F8),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(30),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          height: 36,
+                          child: ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: _categories.length,
+                            itemBuilder: (context, index) {
+                              final cat = _categories[index];
+                              final selected = _selectedCategory == cat;
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: ChoiceChip(
+                                  label: Text(cat),
+                                  selected: selected,
+                                  selectedColor: BatixColors.green,
+                                  labelStyle: TextStyle(color: selected ? Colors.white : Colors.black87),
+                                  onSelected: (_) => setState(() => _selectedCategory = cat),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: products.length,
+                      itemBuilder: (context, index) {
+                        final product = products[index];
+                        final List suppliers = product['suppliers'] as List;
+                        final int minPrice = suppliers.map((s) => s['price'] as int).reduce(min);
+                        final int maxPrice = suppliers.map((s) => s['price'] as int).reduce(max);
+
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 14),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(product['icon'] as IconData, color: BatixColors.orange, size: 42),
+                                  const SizedBox(width: 14),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          product['name'],
+                                          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Color(0xFF0A2239)),
+                                        ),
+                                        Text(product['subtitle'], style: const TextStyle(fontSize: 12.5, color: Colors.black54)),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'De $minPrice à $maxPrice FCFA / ${product['unit']}',
+                                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: BatixColors.green),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const Divider(height: 20),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(backgroundColor: BatixColors.green),
+                                  onPressed: () => _openSupplierSheet(context, product),
+                                  icon: const Icon(Icons.compare_arrows_rounded, color: Colors.white),
+                                  label: Text(
+                                    'Comparer les ${suppliers.length} Fournisseurs (A, B, C...)',
+                                    style: const TextStyle(color: Colors.white),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              );
+            }
+
+            void _openSupplierSheet(BuildContext context, Map<String, dynamic> product) {
+              final List suppliers = product['suppliers'] as List;
+              int selectedSupplierIdx = suppliers.length > 1 ? 1 : 0;
+              int quantity = 50;
+
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: BatixColors.bgDark,
+                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+                builder: (ctx) {
+                  return StatefulBuilder(
+                    builder: (ctx, setModalState) {
+                      final chosen = suppliers[selectedSupplierIdx];
+                      final int unitPrice = chosen['price'] as int;
+                      final int delivery = chosen['delivery'] as int;
+                      final int total = (unitPrice * quantity) + delivery;
+
+                      return Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${product['name']} • Choix du Fournisseur',
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 12),
+                            ...List.generate(suppliers.length, (i) {
+                              final s = suppliers[i];
+                              final isSel = i == selectedSupplierIdx;
+                              return GestureDetector(
+                                onTap: () => setModalState(() => selectedSupplierIdx = i),
+                                child: Container(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: isSel ? BatixColors.green.withOpacity(0.2) : BatixColors.bgCard,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: isSel ? BatixColors.greenLight : BatixColors.border),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text('${s['name']} (Délai ${s['delay']})', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                      Text('${s['price']} FCFA/${product['unit']}',
+                                          style: const TextStyle(color: BatixColors.orangeLight, fontWeight: FontWeight.bold)),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }),
+                            const SizedBox(height: 10),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('Quantité souhaitée :'),
+                                Row(
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.remove_circle_outline, color: BatixColors.orange),
+                                      onPressed: () {
+                                        if (quantity > 10) setModalState(() => quantity -= 10);
+                                      },
+                                    ),
+                                    Text('$quantity', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                    IconButton(
+                                      icon: const Icon(Icons.add_circle_outline, color: BatixColors.greenLight),
+                                      onPressed: () => setModalState(() => quantity += 10),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Text('Total Livré : $total FCFA',
+                                style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: BatixColors.greenLight)),
+                            const SizedBox(height: 14),
+                            SizedBox(
+                              width: double.infinity,
+                              height: 50,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(backgroundColor: BatixColors.orange),
+                                onPressed: () {
+                                  final String pin = (1000 + Random().nextInt(9000)).toString();
+                                  AppDatabase.orders.insert(
+                                    0,
+                                    OrderModel(
+                                      id: 'CMD-2026-00${AppDatabase.orders.length + 125}',
+                                      productName: product['name'],
+                                      supplierName: chosen['name'],
+                                      unitPrice: unitPrice,
+                                      deliveryFee: delivery,
+                                      quantity: quantity,
+                                      destination: 'Chantier Yaoundé',
+                                      secretCode: pin,
+                                    ),
+                                  );
+                                  Navigator.pop(ctx);
+                                  setState(() => _selectedIndex = 1);
+                                },
+                                child: const Text('Commander & Générer le Code Secret à 4 chiffres'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  );
+                },
+              );
+            }
+
+            Widget _buildClientOrdersList() {
+              return ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: AppDatabase.orders.length,
+                itemBuilder: (context, index) {
+                  final o = AppDatabase.orders[index];
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 14),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: BatixColors.bgDark,
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${o.id} • ${o.status}', style: const TextStyle(fontWeight: FontWeight.bold, color: BatixColors.orangeLight)),
+                        const SizedBox(height: 6),
+                        Text('${o.quantity} x ${o.productName} (${o.supplierName})'),
+                        Text('Total : ${o.grandTotal} FCFA', style: const TextStyle(color: BatixColors.greenLight, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 10),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: BatixColors.bgCard,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: BatixColors.orange),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Code Secret Livraison :'),
+                              Text(
+                                o.secretCode.split('').join(' '),
+                                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: BatixColors.orangeLight),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              );
+            }
+          }
+
+          class TransporterDashboardScreen extends StatefulWidget {
+            const TransporterDashboardScreen({super.key});
+
+            @override
+            State<TransporterDashboardScreen> createState() => _TransporterDashboardScreenState();
+          }
+
+          class _TransporterDashboardScreenState extends State<TransporterDashboardScreen> {
+            @override
+            Widget build(BuildContext context) {
+              return Scaffold(
+                appBar: AppBar(
+                  backgroundColor: BatixColors.bgDark,
+                  title: const Text('Espace Transporteur • GPS'),
+                  actions: [
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ClientMainScreen()));
+                      },
+                      child: const Text('Mode Client', style: TextStyle(color: BatixColors.greenLight)),
+                    ),
+                  ],
+                ),
+                body: ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: AppDatabase.orders.length,
+                  itemBuilder: (context, index) {
+                    final order = AppDatabase.orders[index];
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 14),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: BatixColors.bgCard,
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: BatixColors.orange),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('${order.id} (${order.status})', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 6),
+                          Text('${order.quantity} x ${order.productName} • ${order.supplierName}'),
+                          Text('Destination GPS : ${order.destination}', style: const TextStyle(color: Colors.white70)),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(backgroundColor: BatixColors.green),
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => TransporterDeliveryProofScreen(order: order)),
+                                ).then((_) => setState(() {}));
+                              },
+                              icon: const Icon(Icons.camera_alt_rounded),
+                              label: const Text('Filmer les 3 preuves & Valider avec Code Secret'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              );
+            }
+          }
+
+          class TransporterDeliveryProofScreen extends StatefulWidget {
+            final OrderModel order;
+            const TransporterDeliveryProofScreen({super.key, required this.order});
+
+            @override
+            State<TransporterDeliveryProofScreen> createState() => _TransporterDeliveryProofScreenState();
+          }
+
+          class _TransporterDeliveryProofScreenState extends State<TransporterDeliveryProofScreen> {
+            final ImagePicker _picker = ImagePicker();
+            final List<Offset?> _signaturePoints = [];
+            final TextEditingController _pinController = TextEditingController();
+
+            Future<void> _captureDirectCameraPhoto(int step) async {
+              if (step == 2 && widget.order.photo1Matricule == null) return;
+              if (step == 3 && widget.order.photo2Cargaison == null) return;
+
+              try {
+                final XFile? photo = await _picker.pickImage(source: ImageSource.camera, imageQuality: 80);
+                setState(() {
+                  final String p = photo?.path ?? 'CAMERA_STEP_$step';
+                  if (step == 1) widget.order.photo1Matricule = p;
+                  if (step == 2) widget.order.photo2Cargaison = p;
+                  if (step == 3) widget.order.photo3Sol = p;
+                });
+              } catch (_) {
+                setState(() {
+                  if (step == 1) widget.order.photo1Matricule = 'CAMERA_OK_1';
+                  if (step == 2) widget.order.photo2Cargaison = 'CAMERA_OK_2';
+                  if (step == 3) widget.order.photo3Sol = 'CAMERA_OK_3';
+                });
+              }
+            }
+
+            void _validate() {
+              if (widget.order.photo1Matricule == null ||
+                  widget.order.photo2Cargaison == null ||
+                  widget.order.photo3Sol == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Les 3 photos par caméra directe sont obligatoires !')),
+                );
+                return;
+              }
+              if (_signaturePoints.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('La signature du client est obligatoire !')),
+                );
+                return;
+              }
+              if (_pinController.text.trim() != widget.order.secretCode) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Code secret incorrect ! (Attendu : ${widget.order.secretCode})')),
+                );
+                return;
+              }
+              setState(() => widget.order.status = 'Livrée');
+              Navigator.pop(context);
+            }
+
+            @override
+            Widget build(BuildContext context) {
+              final o = widget.order;
+              return Scaffold(
+                appBar: AppBar(backgroundColor: BatixColors.bgDark, title: Text('Validation ${o.id}')),
+                body: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    ListTile(
+                      tileColor: BatixColors.bgCard,
+                      leading: Icon(Icons.looks_one, color: o.photo1Matricule != null ? BatixColors.greenLight : BatixColors.orange),
+                      title: const Text('1. Photo du camion avec matricule'),
+                      trailing: ElevatedButton(
+                        onPressed: () => _captureDirectCameraPhoto(1),
+                        child: Text(o.photo1Matricule != null ? 'OK ✓' : 'Caméra'),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ListTile(
+                      tileColor: BatixColors.bgCard,
+                      leading: Icon(Icons.looks_two, color: o.photo2Cargaison != null ? BatixColors.greenLight : BatixColors.orange),
+                      title: const Text('2. Photo du camion portant le ciment'),
+                      trailing: ElevatedButton(
+                        onPressed: o.photo1Matricule == null ? null : () => _captureDirectCameraPhoto(2),
+                        child: Text(o.photo2Cargaison != null ? 'OK ✓' : 'Caméra'),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ListTile(
+                      tileColor: BatixColors.bgCard,
+                      leading: Icon(Icons.looks_3, color: o.photo3Sol != null ? BatixColors.greenLight : BatixColors.orange),
+                      title: const Text('3. Photo du ciment au sol'),
+                      trailing: ElevatedButton(
+                        onPressed: o.photo2Cargaison == null ? null : () => _captureDirectCameraPhoto(3),
+                        child: Text(o.photo3Sol != null ? 'OK ✓' : 'Caméra'),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('Signature du client :'),
+                    const SizedBox(height: 6),
+                    Container(
+                      height: 130,
+                      color: Colors.white,
+                      child: GestureDetector(
+                        onPanUpdate: (d) => setState(() => _signaturePoints.add(d.localPosition)),
+                        onPanEnd: (_) => _signaturePoints.add(null),
+                        child: CustomPaint(painter: _SignaturePainter(_signaturePoints), size: Size.infinite),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text('Code secret à 4 chiffres du client (Démo : ${o.secretCode}) :'),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: _pinController,
+                      keyboardType: TextInputType.number,
+                      maxLength: 4,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 24, letterSpacing: 12, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      height: 52,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: BatixColors.green),
+                        onPressed: _validate,
+                        child: const Text('Valider la livraison → Base de données'),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+          }
+
+          class _SignaturePainter extends CustomPainter {
+            final List<Offset?> points;
+            _SignaturePainter(this.points);
+
+            @override
+            void paint(Canvas canvas, Size size) {
+              final Paint paint = Paint()
+                ..color = Colors.black
+                ..strokeCap = StrokeCap.round
+                ..strokeWidth = 3.0;
+              for (int i = 0; i < points.length - 1; i++) {
+                if (points[i] != null && points[i + 1] != null) {
+                  canvas.drawLine(points[i]!, points[i + 1]!, paint);
+                }
+              }
+            }
+
+            @override
+            bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+          }
+          EOF
+
+      - name: 6. Compilation de l'APK et création du ZIP
+        working-directory: batix_app
         run: |
           flutter pub get
-          if [ -f "/tmp/batix_backup/logo.png" ]; then
-            dart run flutter_launcher_icons
-          fi
+          dart run flutter_launcher_icons
+          flutter build apk --release
+          zip -r ../BATIX_Projet_Complet.zip . -x "build/*" ".dart_tool/*"
 
-      - name: 6. Compilation du fichier APK final
-        run: flutter build apk --release
-
-      - name: 7. Création du fichier ZIP complet du projet
-        run: zip -r BATIX_Projet_Complet.zip . -x "build/*" ".git/*" ".dart_tool/*"
-
-      - name: 8. Téléchargement de l'application APK prête à installer
+      - name: 7. Télécharger l'application APK
         uses: actions/upload-artifact@v4
         with:
           name: BATIX-Application-APK
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: batix_app/build/app/outputs/flutter-apk/app-release.apk
 
-      - name: 9. Téléchargement du fichier ZIP complet du projet
+      - name: 8. Télécharger le fichier ZIP complet
         uses: actions/upload-artifact@v4
         with:
           name: BATIX-Code-Source-Complet-ZIP
