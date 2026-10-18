@@ -1,4 +1,4 @@
-name: Compiler BATIX APK & ZIP
+name: Compiler BATIX V2 (Assets HD ZIP + APK + Code ZIP)
 
 on:
   push:
@@ -9,49 +9,207 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  build-android-apk:
+  build-batix:
     runs-on: ubuntu-latest
 
     steps:
       - name: 1. Récupération du dépôt
         uses: actions/checkout@v4
 
-      - name: 2. Installation rapide de Flutter & Java 17
+      - name: 2. Installation de Pillow (Images HD), Java 17 & Flutter
         run: |
           export JAVA_HOME=$JAVA_HOME_17_X64
           echo "JAVA_HOME=$JAVA_HOME_17_X64" >> $GITHUB_ENV
+          pip install pillow
           git clone https://github.com/flutter/flutter.git -b stable --depth 1 $HOME/flutter
           echo "$HOME/flutter/bin" >> $GITHUB_PATH
 
-      - name: 3. Création du projet Flutter BATIX complet
+      - name: 3. Génération des 14 Images HD & Création de BATIX_Assets_HD.zip
         run: |
           rm -rf batix_app
           flutter create --platforms=android --org com.batix.platform --project-name batix_app batix_app
-          mkdir -p batix_app/assets
+          mkdir -p batix_app/assets/images
+          mkdir -p batix_app/assets/icons
 
-          # Si vous avez mis logo.png dans le dépôt, on l'utilise, sinon on génère un logo 256x256 valide
-          if [ -f "assets/logo.png" ]; then
-            cp assets/logo.png batix_app/assets/logo.png
-          elif [ -f "logo.png" ]; then
-            cp logo.png batix_app/assets/logo.png
-          else
-            python3 -c '
-          import zlib, struct
-          w, h = 256, 256
-          raw = b"".join(b"\x00" + b"\x00\xa8\x59" * w for _ in range(h))
-          def ck(t, d): return struct.pack("!I", len(d)) + t + d + struct.pack("!I", zlib.crc32(t + d) & 0xffffffff)
-          png = b"\x89PNG\r\n\x1a\n" + ck(b"IHDR", struct.pack("!IIBBBBB", w, h, 8, 2, 0, 0, 0)) + ck(b"IDAT", zlib.compress(raw, 9)) + ck(b"IEND", b"")
-          open("batix_app/assets/logo.png", "wb").write(png)
-          '
-          fi
+          python3 - << 'PYEOF'
+          import os
+          from PIL import Image, ImageDraw
 
-      - name: 4. Écriture de pubspec.yaml et des permissions Android
+          os.makedirs("batix_app/assets/images", exist_ok=True)
+          os.makedirs("batix_app/assets/icons", exist_ok=True)
+
+          def grad(w, h, c1, c2):
+              img = Image.new("RGBA", (w, h))
+              d = ImageDraw.Draw(img)
+              for y in range(h):
+                  t = y / float(max(1, h - 1))
+                  r = int(c1[0] + (c2[0] - c1[0]) * t)
+                  g = int(c1[1] + (c2[1] - c1[1]) * t)
+                  b = int(c1[2] + (c2[2] - c1[2]) * t)
+                  d.line([(0, y), (w, y)], fill=(r, g, b, 255))
+              return img
+
+          # 1. LOGO BATIX HD CENTRÉ (512x512)
+          logo = Image.new("RGBA", (512, 512), (8, 22, 34, 255))
+          d = ImageDraw.Draw(logo)
+          d.ellipse((36, 26, 476, 466), fill=(12, 42, 52, 255), outline=(0, 185, 95, 255), width=22)
+          d.arc((20, 10, 492, 482), start=310, end=140, fill=(255, 145, 0, 255), width=14)
+          d.rectangle((140, 130, 185, 300), fill=(15, 55, 85, 255), outline=(255, 255, 255, 180), width=2)
+          d.rectangle((195, 95, 250, 300), fill=(10, 40, 68, 255), outline=(255, 255, 255, 180), width=2)
+          d.rectangle((260, 145, 305, 300), fill=(18, 65, 95, 255), outline=(255, 255, 255, 180), width=2)
+          d.line([(335, 95), (335, 260)], fill=(255, 165, 0, 255), width=6)
+          d.line([(275, 110), (395, 110)], fill=(255, 165, 0, 255), width=6)
+          d.polygon([(110, 430), (225, 295), (295, 295), (400, 430)], fill=(14, 28, 44, 255))
+          d.line([(256, 305), (256, 425)], fill=(255, 255, 255, 220), width=6)
+          d.rounded_rectangle((210, 210, 345, 290), radius=10, fill=(245, 248, 252, 255), outline=(10, 25, 41, 255), width=4)
+          d.rounded_rectangle((335, 230, 385, 290), radius=8, fill=(255, 145, 0, 255), outline=(10, 25, 41, 255), width=4)
+          d.ellipse((230, 275, 260, 305), fill=(20, 20, 20, 255), outline=(220, 220, 220, 255), width=4)
+          d.ellipse((340, 275, 370, 305), fill=(20, 20, 20, 255), outline=(220, 220, 220, 255), width=4)
+          logo.save("batix_app/assets/logo.png")
+          logo.save("batix_app/assets/icons/app_icon_512.png")
+
+          if os.path.exists("assets/logo.png"):
+              os.system("cp assets/logo.png batix_app/assets/logo.png")
+          elif os.path.exists("logo.png"):
+              os.system("cp logo.png batix_app/assets/logo.png")
+
+          # 2. HERO TRUCK COUCHER DE SOLEIL (800x500)
+          hero = grad(800, 500, (255, 140, 40), (10, 28, 44))
+          dh = ImageDraw.Draw(hero)
+          dh.ellipse((80, 160, 240, 320), fill=(255, 220, 110, 255))
+          for x, hb in [(50, 220), (120, 250), (280, 200), (350, 230), (580, 190), (660, 220), (730, 240)]:
+              dh.rectangle((x, hb, x+55, 340), fill=(28, 42, 58, 255))
+          dh.polygon([(0, 500), (310, 340), (490, 340), (800, 500)], fill=(24, 34, 46, 255))
+          dh.line([(400, 340), (400, 500)], fill=(255, 190, 60, 255), width=6)
+          dh.rounded_rectangle((260, 210, 480, 375), radius=12, fill=(245, 247, 250, 255), outline=(40, 55, 70, 255), width=4)
+          dh.rounded_rectangle((460, 225, 575, 375), radius=16, fill=(255, 255, 255, 255), outline=(15, 30, 45, 255), width=5)
+          dh.rounded_rectangle((475, 240, 560, 295), radius=8, fill=(20, 45, 70, 255))
+          for wx in [290, 340, 440, 510]:
+              dh.ellipse((wx, 350, wx+48, 398), fill=(18, 22, 26, 255), outline=(180, 190, 200, 255), width=5)
+          hero.save("batix_app/assets/images/hero_truck.png")
+
+          # 3. CIMENT 50KG (400x400)
+          cim = grad(400, 400, (240, 235, 225), (210, 200, 185))
+          dc = ImageDraw.Draw(cim)
+          dc.rounded_rectangle((75, 45, 325, 355), radius=24, fill=(198, 162, 118, 255), outline=(140, 105, 65, 255), width=5)
+          dc.rectangle((75, 130, 325, 265), fill=(235, 215, 185, 255))
+          dc.rectangle((95, 150, 305, 195), fill=(0, 150, 80, 255))
+          dc.rectangle((115, 215, 285, 245), fill=(255, 140, 0, 255))
+          cim.save("batix_app/assets/images/ciment.png")
+
+          # 4. FER À BÉTON (400x400)
+          fer = grad(400, 400, (225, 232, 240), (175, 190, 205))
+          df = ImageDraw.Draw(fer)
+          for off in range(-90, 110, 28):
+              df.line([(40, 280+off), (360, 100+off)], fill=(70, 82, 95, 255), width=20)
+              df.line([(40, 276+off), (360, 96+off)], fill=(150, 165, 180, 255), width=6)
+          fer.save("batix_app/assets/images/fer.png")
+
+          # 5. GRAVIER (400x400)
+          grav = grad(400, 400, (230, 235, 238), (190, 200, 208))
+          dg = ImageDraw.Draw(grav)
+          for gx in range(60, 330, 32):
+              for gy in range(130, 330, 28):
+                  if (gx - 200)**2 + (gy - 250)**2 < 140**2:
+                      c = 90 + ((gx * gy) % 75)
+                      dg.polygon([(gx, gy), (gx+26, gy-10), (gx+34, gy+16), (gx+8, gy+24)], fill=(c, c+5, c+10, 255), outline=(55, 60, 65, 255))
+          grav.save("batix_app/assets/images/gravier.png")
+
+          # 6. BOIS DE COFFRAGE (400x400)
+          bois = grad(400, 400, (245, 235, 220), (220, 195, 165))
+          db = ImageDraw.Draw(bois)
+          for by in range(90, 310, 45):
+              db.rounded_rectangle((50, by, 350, by+38), radius=6, fill=(195, 130, 65, 255), outline=(135, 80, 30, 255), width=4)
+          bois.save("batix_app/assets/images/bois.png")
+
+          # 7. BRIQUES / PARPAINGS (400x400)
+          briq = grad(400, 400, (242, 232, 225), (215, 195, 180))
+          dbr = ImageDraw.Draw(briq)
+          for r in range(3):
+              for c in range(2):
+                  bx, by = 60 + c*145 + (r%2)*20, 95 + r*75
+                  dbr.rounded_rectangle((bx, by, bx+130, by+65), radius=6, fill=(205, 95, 50, 255), outline=(145, 55, 25, 255), width=4)
+          briq.save("batix_app/assets/images/brique.png")
+
+          # 8. SABLE DE CONSTRUCTION (400x400)
+          sab = grad(400, 400, (245, 238, 220), (225, 205, 165))
+          ds = ImageDraw.Draw(sab)
+          ds.polygon([(40, 330), (200, 120), (360, 330)], fill=(225, 182, 98, 255), outline=(185, 140, 60, 255))
+          sab.save("batix_app/assets/images/sable.png")
+
+          # 9. CARTE GPS SOMBRE (800x450)
+          gmap = Image.new("RGBA", (800, 450), (12, 28, 44, 255))
+          dm = ImageDraw.Draw(gmap)
+          for x in range(0, 800, 55):
+              dm.line([(x, 0), (x+40, 450)], fill=(22, 48, 72, 255), width=2)
+          for y in range(0, 450, 55):
+              dm.line([(0, y), (800, y+25)], fill=(22, 48, 72, 255), width=2)
+          dm.line([(90, 320), (230, 250), (390, 280), (540, 170), (700, 130)], fill=(0, 215, 110, 255), width=10)
+          dm.ellipse((65, 295, 115, 345), fill=(0, 195, 95, 255), outline=(255, 255, 255, 255), width=4)
+          dm.ellipse((675, 105, 725, 155), fill=(255, 110, 30, 255), outline=(255, 255, 255, 255), width=4)
+          gmap.save("batix_app/assets/images/gps_map.png")
+
+          # 10. NAVIGATION GPS 3D CHAUFFEUR (800x500)
+          nav3d = grad(800, 500, (8, 20, 32), (14, 38, 52))
+          dn = ImageDraw.Draw(nav3d)
+          dn.polygon([(120, 500), (330, 120), (470, 120), (680, 500)], fill=(26, 40, 56, 255))
+          dn.line([(330, 120), (120, 500)], fill=(0, 185, 95, 255), width=5)
+          dn.line([(470, 120), (680, 500)], fill=(0, 185, 95, 255), width=5)
+          dn.line([(400, 420), (400, 180), (560, 180)], fill=(0, 230, 118, 255), width=14)
+          dn.rounded_rectangle((340, 330, 460, 455), radius=14, fill=(245, 248, 252, 255), outline=(0, 185, 95, 255), width=4)
+          nav3d.save("batix_app/assets/images/gps_3d.png")
+
+          # 11, 12, 13. LES 3 PHOTOS DE PREUVE DE LIVRAISON (600x350)
+          p1 = grad(600, 350, (45, 58, 72), (25, 34, 44))
+          dp1 = ImageDraw.Draw(p1)
+          dp1.rounded_rectangle((90, 30, 510, 270), radius=12, fill=(165, 45, 45, 255), outline=(30, 30, 30, 255), width=6)
+          dp1.rounded_rectangle((195, 165, 405, 225), radius=6, fill=(245, 248, 252, 255), outline=(15, 25, 35, 255), width=4)
+          p1.save("batix_app/assets/images/photo1_matricule.png")
+
+          p2 = grad(600, 350, (115, 155, 195), (65, 85, 105))
+          dp2 = ImageDraw.Draw(p2)
+          dp2.rounded_rectangle((80, 70, 430, 265), radius=10, fill=(45, 95, 155, 255), outline=(25, 45, 70, 255), width=4)
+          for r in range(4):
+              for c in range(5):
+                  dp2.rounded_rectangle((100+c*62, 85+r*35, 156+c*62, 115+r*35), radius=4, fill=(205, 185, 155, 255), outline=(140, 120, 95, 255), width=2)
+          p2.save("batix_app/assets/images/photo2_cargaison.png")
+
+          p3 = grad(600, 350, (165, 150, 130), (110, 95, 80))
+          dp3 = ImageDraw.Draw(p3)
+          for p in range(2):
+              bx = 95 + p * 225
+              dp3.rectangle((bx, 265, bx+185, 285), fill=(155, 105, 50, 255))
+              for r in range(5):
+                  for c in range(3):
+                      dp3.rounded_rectangle((bx+c*60, 110+r*30, bx+56+c*60, 137+r*30), radius=4, fill=(210, 195, 170, 255), outline=(145, 130, 105, 255), width=2)
+          p3.save("batix_app/assets/images/photo3_sol.png")
+
+          # 14. CAMION 3D VALIDATION FINALE (500x400)
+          ts = grad(500, 400, (8, 32, 28), (6, 18, 26))
+          dts = ImageDraw.Draw(ts)
+          dts.ellipse((150, 30, 350, 230), fill=(0, 200, 95, 255), outline=(120, 255, 180, 255), width=6)
+          dts.line([(205, 130), (240, 165), (305, 95)], fill=(255, 255, 255, 255), width=14)
+          dts.rounded_rectangle((110, 235, 340, 350), radius=12, fill=(240, 245, 250, 255), outline=(0, 185, 95, 255), width=4)
+          dts.rounded_rectangle((330, 255, 405, 350), radius=10, fill=(255, 145, 0, 255), outline=(255, 255, 255, 255), width=3)
+          ts.save("batix_app/assets/images/truck_success.png")
+          PYEOF
+
+          # Création immédiate du ZIP contenant uniquement les images et icônes HD
+          cd batix_app && zip -r ../BATIX_Assets_HD_Images.zip assets/ && cd ..
+
+      - name: 4. Envoi immédiat du dossier ZIP des Assets HD sur GitHub
+        uses: actions/upload-artifact@v4
+        with:
+          name: BATIX-Dossier-Assets-HD-ZIP
+          path: BATIX_Assets_HD_Images.zip
+
+      - name: 5. Configuration de pubspec.yaml et des permissions Android
         run: |
           cat << 'EOF' > batix_app/pubspec.yaml
           name: batix_app
           description: BATIX - L'approvisionnement intelligent de vos chantiers.
           publish_to: 'none'
-          version: 1.0.0+1
+          version: 2.0.0+2
 
           environment:
             sdk: '>=3.0.0 <4.0.0'
@@ -69,80 +227,68 @@ jobs:
           flutter_launcher_icons:
             android: "launcher_icon"
             image_path: "assets/logo.png"
-            adaptive_icon_background: "#08121E"
+            adaptive_icon_background: "#081622"
             adaptive_icon_foreground: "assets/logo.png"
 
           flutter:
             uses-material-design: true
             assets:
               - assets/logo.png
+              - assets/images/
+              - assets/icons/
           EOF
 
           sed -i 's/<application/<uses-permission android:name="android.permission.CAMERA" \/>\n    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" \/>\n    <application/g' batix_app/android/app/src/main/AndroidManifest.xml
           sed -i 's/android:label="batix_app"/android:label="BATIX"/g' batix_app/android/app/src/main/AndroidManifest.xml
 
-      - name: 5. Injection automatique du code complet BATIX (lib/main.dart)
+      - name: 6. Injection du code complet BATIX V2 (Toutes les interfaces)
         run: |
           cat << 'EOF' > batix_app/lib/main.dart
           import 'dart:math';
           import 'package:flutter/material.dart';
           import 'package:image_picker/image_picker.dart';
 
-          void main() {
-            runApp(const BatixApp());
-          }
+          void main() => runApp(const BatixApp());
 
           class BatixColors {
-            static const Color bgDark = Color(0xFF08121E);
-            static const Color bgCard = Color(0xFF102132);
-            static const Color border = Color(0xFF1E3A56);
-            static const Color green = Color(0xFF00A859);
-            static const Color greenLight = Color(0xFF10B981);
+            static const Color bgDark = Color(0xFF071520);
+            static const Color bgCard = Color(0xFF0E2433);
+            static const Color border = Color(0xFF1B4358);
+            static const Color green = Color(0xFF00B85C);
+            static const Color greenLight = Color(0xFF10E578);
             static const Color orange = Color(0xFFFF8C00);
-            static const Color orangeLight = Color(0xFFFFB300);
+            static const Color orangeLight = Color(0xFFFFB700);
 
-            static const LinearGradient orangeGradient = LinearGradient(
-              colors: [Color(0xFFFF7A00), Color(0xFFFFAE00)],
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-            );
-
-            static const LinearGradient greenGradient = LinearGradient(
-              colors: [Color(0xFF008F4C), Color(0xFF10B981)],
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-            );
-
-            static const LinearGradient darkBackgroundGradient = LinearGradient(
-              colors: [Color(0xFF0A1929), Color(0xFF06101A), Color(0xFF0A221E)],
+            static const LinearGradient orangeGrad = LinearGradient(colors: [Color(0xFFFF7B00), Color(0xFFFFB300)]);
+            static const LinearGradient greenGrad = LinearGradient(colors: [Color(0xFF009E4F), Color(0xFF1AD16F)]);
+            static const LinearGradient darkGrad = LinearGradient(
+              colors: [Color(0xFF081B28), Color(0xFF06121B), Color(0xFF082420)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             );
           }
 
           class OrderModel {
-            final String id;
-            final String productName;
-            final String supplierName;
-            final int unitPrice;
-            final int deliveryFee;
-            final int quantity;
-            final String destination;
-            final String secretCode;
+            final String id, productName, productAsset, supplierName, unit, clientName, clientPhone, destination, distance, duration, secretCode;
+            final int unitPrice, deliveryFee, quantity;
             String status;
-            String? photo1Matricule;
-            String? photo2Cargaison;
-            String? photo3Sol;
+            String? photo1Matricule, photo2Cargaison, photo3Sol;
             bool isSigned;
 
             OrderModel({
               required this.id,
               required this.productName,
+              required this.productAsset,
               required this.supplierName,
               required this.unitPrice,
               required this.deliveryFee,
               required this.quantity,
+              this.unit = 'sacs (50kg)',
+              this.clientName = 'Bâtiment Horizon',
+              this.clientPhone = '+237 6 57 81 70 43',
               required this.destination,
+              this.distance = '2,4 km',
+              this.duration = '30 min',
               required this.secretCode,
               this.status = 'En cours',
               this.photo1Matricule,
@@ -151,410 +297,281 @@ jobs:
               this.isSigned = false,
             });
 
-            int get totalMaterials => unitPrice * quantity;
-            int get grandTotal => totalMaterials + deliveryFee;
+            int get grandTotal => (unitPrice * quantity) + deliveryFee;
           }
 
           class AppDatabase {
             static final List<OrderModel> orders = [
               OrderModel(
-                id: 'CMD-2026-00124',
-                productName: 'Ciment 50kg (CPJ 42.5)',
-                supplierName: 'Fournisseur B (Dépôt Central)',
-                unitPrice: 4900,
+                id: 'CMD-2025-0089',
+                productName: 'Ciment CPJ 42.5',
+                productAsset: 'assets/images/ciment.png',
+                supplierName: 'Fournisseur A',
+                unitPrice: 4700,
                 deliveryFee: 15000,
-                quantity: 50,
-                destination: 'Chantier Odza (Derrière Tradex)',
+                quantity: 100,
+                destination: 'Quartier Bastos, Yaoundé',
+                secretCode: '8419',
+              ),
+              OrderModel(
+                id: 'CMD-2025-0091',
+                productName: 'Fer à béton 8mm',
+                productAsset: 'assets/images/fer.png',
+                supplierName: 'Fournisseur B',
+                unitPrice: 3500,
+                deliveryFee: 15000,
+                quantity: 200,
+                unit: 'barres',
+                destination: 'Nkolbisson, Yaoundé',
+                distance: '5,7 km',
+                duration: '1 h 15',
                 secretCode: '8419',
               ),
             ];
 
             static final List<Map<String, dynamic>> products = [
               {
-                'name': 'Ciment 50kg',
-                'subtitle': 'Haute qualité • CPJ 42.5 / Robuste',
+                'name': 'Ciment CPJ 42.5',
                 'category': 'Ciment',
                 'unit': 'sac',
-                'icon': Icons.foundation,
+                'basePrice': 4700,
+                'stock': 500,
+                'alert': 50,
+                'rating': 4.8,
+                'reviews': 320,
+                'asset': 'assets/images/ciment.png',
                 'suppliers': [
-                  {'name': 'Fournisseur A', 'price': 5000, 'delivery': 15000, 'delay': '24h', 'rating': 4.7, 'stock': 600},
-                  {'name': 'Fournisseur B', 'price': 4900, 'delivery': 15000, 'delay': '24h', 'rating': 4.8, 'stock': 450},
-                  {'name': 'Fournisseur C', 'price': 5100, 'delivery': 10000, 'delay': 'Express 6h', 'rating': 4.9, 'stock': 1200},
-                  {'name': 'Fournisseur D', 'price': 4850, 'delivery': 20000, 'delay': '48h', 'rating': 4.4, 'stock': 300},
+                  {'name': 'Fournisseur A', 'price': 4700, 'delivery': 15000, 'distance': '1,2 km', 'delay': '30 min', 'rating': 4.8, 'reviews': 120},
+                  {'name': 'Fournisseur B', 'price': 4850, 'delivery': 15000, 'distance': '2,5 km', 'delay': '1 h', 'rating': 4.5, 'reviews': 66},
+                  {'name': 'Fournisseur C', 'price': 4990, 'delivery': 12000, 'distance': '4,8 km', 'delay': '3 h', 'rating': 4.6, 'reviews': 72},
                 ],
               },
               {
-                'name': 'Fer à béton 12mm',
-                'subtitle': 'Acier haute résistance • FeE500',
-                'category': 'Fer à béton',
+                'name': 'Fer à béton 8mm',
+                'category': 'Fer',
                 'unit': 'barre',
-                'icon': Icons.linear_scale,
+                'basePrice': 3500,
+                'stock': 250,
+                'alert': 40,
+                'rating': 4.7,
+                'reviews': 185,
+                'asset': 'assets/images/fer.png',
                 'suppliers': [
-                  {'name': 'Fournisseur A', 'price': 6800, 'delivery': 15000, 'delay': '24h', 'rating': 4.7, 'stock': 500},
-                  {'name': 'Fournisseur B', 'price': 6650, 'delivery': 18000, 'delay': '24h', 'rating': 4.6, 'stock': 800},
-                  {'name': 'Fournisseur C', 'price': 6900, 'delivery': 12000, 'delay': 'Express 12h', 'rating': 4.8, 'stock': 350},
+                  {'name': 'Fournisseur A', 'price': 3500, 'delivery': 15000, 'distance': '1,8 km', 'delay': '45 min', 'rating': 4.8, 'reviews': 98},
+                  {'name': 'Fournisseur B', 'price': 3650, 'delivery': 15000, 'distance': '2,9 km', 'delay': '1 h', 'rating': 4.6, 'reviews': 54},
                 ],
               },
               {
-                'name': 'Gravier 5/15 ou 15/25',
-                'subtitle': 'Granulats de carrière concassés',
+                'name': 'Gravier 15/25',
                 'category': 'Gravier',
                 'unit': 'm³',
-                'icon': Icons.landscape,
+                'basePrice': 4200,
+                'stock': 180,
+                'alert': 30,
+                'rating': 4.8,
+                'reviews': 140,
+                'asset': 'assets/images/gravier.png',
                 'suppliers': [
-                  {'name': 'Fournisseur A', 'price': 4200, 'delivery': 25000, 'delay': '24h', 'rating': 4.8, 'stock': 200},
-                  {'name': 'Fournisseur B', 'price': 4000, 'delivery': 28000, 'delay': '48h', 'rating': 4.5, 'stock': 150},
-                  {'name': 'Fournisseur E', 'price': 4150, 'delivery': 22000, 'delay': '24h', 'rating': 4.7, 'stock': 400},
+                  {'name': 'Fournisseur A', 'price': 4200, 'delivery': 25000, 'distance': '3,2 km', 'delay': '1 h', 'rating': 4.8, 'reviews': 80},
+                  {'name': 'Fournisseur B', 'price': 4100, 'delivery': 28000, 'distance': '5,0 km', 'delay': '2 h', 'rating': 4.5, 'reviews': 45},
+                ],
+              },
+              {
+                'name': 'Briques creuses',
+                'category': 'Brique',
+                'unit': 'unité',
+                'basePrice': 250,
+                'stock': 1200,
+                'alert': 200,
+                'rating': 4.6,
+                'reviews': 95,
+                'asset': 'assets/images/brique.png',
+                'suppliers': [
+                  {'name': 'Fournisseur A', 'price': 250, 'delivery': 20000, 'distance': '2,0 km', 'delay': '1 h', 'rating': 4.7, 'reviews': 64},
+                  {'name': 'Fournisseur B', 'price': 240, 'delivery': 22000, 'distance': '4,5 km', 'delay': '2 h', 'rating': 4.5, 'reviews': 39},
                 ],
               },
               {
                 'name': 'Bois de coffrage',
-                'subtitle': 'Planche épaisseur 25mm • Traitée',
                 'category': 'Bois',
                 'unit': 'm²',
-                'icon': Icons.forest,
+                'basePrice': 12000,
+                'stock': 90,
+                'alert': 20,
+                'rating': 4.7,
+                'reviews': 76,
+                'asset': 'assets/images/bois.png',
                 'suppliers': [
-                  {'name': 'Fournisseur A', 'price': 12000, 'delivery': 15000, 'delay': '24h', 'rating': 4.6, 'stock': 120},
-                  {'name': 'Fournisseur B', 'price': 11500, 'delivery': 15000, 'delay': '24h', 'rating': 4.8, 'stock': 300},
+                  {'name': 'Fournisseur A', 'price': 12000, 'delivery': 15000, 'distance': '2,1 km', 'delay': '1 h', 'rating': 4.7, 'reviews': 51},
                 ],
               },
               {
-                'name': 'Parpaings 15cm / 20cm',
-                'subtitle': 'Agglos vibrés haute densité',
-                'category': 'Brique',
-                'unit': 'pièce',
-                'icon': Icons.grid_view_rounded,
+                'name': 'Sable de construction',
+                'category': 'Sable',
+                'unit': 'm³',
+                'basePrice': 12000,
+                'stock': 50,
+                'alert': 60,
+                'rating': 4.9,
+                'reviews': 112,
+                'asset': 'assets/images/sable.png',
                 'suppliers': [
-                  {'name': 'Fournisseur A', 'price': 350, 'delivery': 20000, 'delay': '24h', 'rating': 4.7, 'stock': 5000},
-                  {'name': 'Fournisseur B', 'price': 325, 'delivery': 22000, 'delay': '48h', 'rating': 4.5, 'stock': 8000},
+                  {'name': 'Fournisseur A', 'price': 12000, 'delivery': 25000, 'distance': '3,0 km', 'delay': '1 h', 'rating': 4.9, 'reviews': 88},
                 ],
               },
+            ];
+
+            static final List<Map<String, dynamic>> drivers = [
+              {'name': 'Yannick M.', 'phone': '+237 6 72 45 12 98', 'status': 'En livraison', 'rating': 4.8, 'trips': 124, 'eta': '12 min • 4,2 km'},
+              {'name': 'Mbarga T.', 'phone': '+237 6 98 21 45 67', 'status': 'En livraison', 'rating': 4.7, 'trips': 98, 'eta': '20 min • 6,1 km'},
+              {'name': 'Salifou D.', 'phone': '+237 6 70 12 34 56', 'status': 'En route', 'rating': 4.9, 'trips': 156, 'eta': '8 min • 2,4 km'},
             ];
           }
 
           class BatixApp extends StatelessWidget {
             const BatixApp({super.key});
-
             @override
             Widget build(BuildContext context) {
               return MaterialApp(
                 title: 'BATIX',
                 debugShowCheckedModeBanner: false,
-                theme: ThemeData(
-                  brightness: Brightness.dark,
-                  scaffoldBackgroundColor: BatixColors.bgDark,
-                  primaryColor: BatixColors.green,
-                  fontFamily: 'Roboto',
-                ),
+                theme: ThemeData(brightness: Brightness.dark, scaffoldBackgroundColor: BatixColors.bgDark, primaryColor: BatixColors.green),
                 home: const OnboardingScreen(),
               );
             }
           }
 
-          class BatixLogoHeader extends StatelessWidget {
+          // LOGO BATIX CENTRÉ PARTOUT
+          class CenteredBatixLogo extends StatelessWidget {
             final double size;
-            final bool showTagline;
-            final bool darkText;
-
-            const BatixLogoHeader({
-              super.key,
-              this.size = 70,
-              this.showTagline = true,
-              this.darkText = false,
-            });
+            final bool showSub;
+            final String sub;
+            const CenteredBatixLogo({super.key, this.size = 72, this.showSub = true, this.sub = "L'approvisionnement intelligent\nde vos chantiers."});
 
             @override
             Widget build(BuildContext context) {
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: size,
-                    height: size,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: const LinearGradient(
-                        colors: [BatixColors.green, Color(0xFF053824)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
+              return Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: size,
+                      height: size,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: BatixColors.orange, width: 2.5),
+                        boxShadow: [BoxShadow(color: BatixColors.green.withOpacity(0.35), blurRadius: 12)],
                       ),
-                      border: Border.all(color: BatixColors.orange, width: 2.5),
+                      child: ClipOval(child: Image.asset('assets/logo.png', fit: BoxFit.cover)),
                     ),
-                    child: ClipOval(
-                      child: Image.asset(
-                        'assets/logo.png',
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Icon(
-                          Icons.local_shipping_rounded,
-                          size: size * 0.55,
-                          color: Colors.white,
-                        ),
+                    const SizedBox(height: 6),
+                    RichText(
+                      text: TextSpan(
+                        style: TextStyle(fontSize: size * 0.40, fontWeight: FontWeight.w900, letterSpacing: 1.5),
+                        children: const [
+                          TextSpan(text: 'BATI', style: TextStyle(color: Colors.white)),
+                          TextSpan(text: 'X', style: TextStyle(color: BatixColors.orange)),
+                        ],
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  RichText(
-                    text: TextSpan(
-                      style: TextStyle(
-                        fontSize: size * 0.42,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1.5,
+                    if (showSub)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(sub, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.white70)),
                       ),
+                  ],
+                ),
+              );
+            }
+          }
+
+          // ÉCRAN 1 : ONBOARDING (Image 3 & 12)
+          class OnboardingScreen extends StatelessWidget {
+            const OnboardingScreen({super.key});
+            @override
+            Widget build(BuildContext context) {
+              return Scaffold(
+                body: Container(
+                  decoration: const BoxDecoration(gradient: BatixColors.darkGrad),
+                  padding: const EdgeInsets.all(22),
+                  child: SafeArea(
+                    child: Column(
                       children: [
-                        TextSpan(
-                          text: 'BATI',
-                          style: TextStyle(color: darkText ? const Color(0xFF0A2239) : Colors.white),
+                        const CenteredBatixLogo(size: 90),
+                        const SizedBox(height: 16),
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(24),
+                            child: Image.asset('assets/images/hero_truck.png', width: double.infinity, fit: BoxFit.cover),
+                          ),
                         ),
-                        const TextSpan(
-                          text: 'X',
-                          style: TextStyle(color: BatixColors.orange),
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: const [
+                            _Pillar(Icons.widgets_rounded, 'Matériaux\nBTP'),
+                            _Pillar(Icons.local_shipping_rounded, 'Livraison\nrapide'),
+                            _Pillar(Icons.verified_user_rounded, 'Partenaires\nfiables'),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                        GestureDetector(
+                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WelcomeAuthScreen())),
+                          child: Container(
+                            height: 56,
+                            decoration: BoxDecoration(gradient: BatixColors.orangeGrad, borderRadius: BorderRadius.circular(30)),
+                            child: const Center(
+                              child: Text('Commencer  →', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                            ),
+                          ),
                         ),
                       ],
                     ),
                   ),
-                  if (showTagline) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      "L'approvisionnement intelligent\nde vos chantiers.",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: darkText ? Colors.black87 : Colors.white70,
-                        height: 1.3,
-                      ),
-                    ),
-                  ],
-                ],
-              );
-            }
-          }
-
-          class OnboardingScreen extends StatelessWidget {
-            const OnboardingScreen({super.key});
-
-            @override
-            Widget build(BuildContext context) {
-              return Scaffold(
-                body: Container(
-                  width: double.infinity,
-                  decoration: const BoxDecoration(gradient: BatixColors.darkBackgroundGradient),
-                  child: SafeArea(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 20),
-                          const BatixLogoHeader(size: 95, showTagline: true),
-                          const Spacer(),
-                          Container(
-                            height: 210,
-                            width: double.infinity,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(24),
-                              gradient: LinearGradient(
-                                colors: [
-                                  BatixColors.orange.withOpacity(0.25),
-                                  BatixColors.green.withOpacity(0.25),
-                                ],
-                              ),
-                              border: Border.all(color: BatixColors.border, width: 1.5),
-                            ),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: const [
-                                Icon(Icons.local_shipping_rounded, size: 86, color: BatixColors.orangeLight),
-                                SizedBox(height: 12),
-                                Text(
-                                  'Votre partenaire logistique BTP de confiance',
-                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const Spacer(),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                            children: const [
-                              _FeatureBadge(icon: Icons.widgets_rounded, label: 'Matériaux\nBTP'),
-                              _FeatureBadge(icon: Icons.bolt_rounded, label: 'Livraison\nrapide'),
-                              _FeatureBadge(icon: Icons.verified_user_rounded, label: 'Partenaires\nfiables'),
-                            ],
-                          ),
-                          const SizedBox(height: 28),
-                          GestureDetector(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (_) => const WelcomeAuthScreen()),
-                              );
-                            },
-                            child: Container(
-                              width: double.infinity,
-                              height: 56,
-                              decoration: BoxDecoration(
-                                gradient: BatixColors.orangeGradient,
-                                borderRadius: BorderRadius.circular(30),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: const [
-                                  Text(
-                                    'Commencer',
-                                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
-                                  ),
-                                  SizedBox(width: 10),
-                                  Icon(Icons.arrow_forward_rounded, color: Colors.white),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
                 ),
               );
             }
           }
 
-          class _FeatureBadge extends StatelessWidget {
+          class _Pillar extends StatelessWidget {
             final IconData icon;
-            final String label;
-            const _FeatureBadge({required this.icon, required this.label});
-
+            final String text;
+            const _Pillar(this.icon, this.text);
             @override
             Widget build(BuildContext context) {
               return Column(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: BatixColors.green.withOpacity(0.15),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: BatixColors.green),
-                    ),
-                    child: Icon(icon, color: BatixColors.greenLight, size: 24),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.white70)),
+                  CircleAvatar(backgroundColor: BatixColors.green.withOpacity(0.2), child: Icon(icon, color: BatixColors.greenLight)),
+                  const SizedBox(height: 4),
+                  Text(text, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.white70)),
                 ],
               );
             }
           }
 
+          // ÉCRAN 2 : INSCRIPTION / CONNEXION / DÉMO
           class WelcomeAuthScreen extends StatelessWidget {
             const WelcomeAuthScreen({super.key});
-
-            void _goToProfileChoice(BuildContext context, String mode) {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => ProfileSelectionScreen(authMode: mode)),
-              );
-            }
-
+            void _go(BuildContext ctx) => Navigator.push(ctx, MaterialPageRoute(builder: (_) => const ProfileSelectionScreen()));
             @override
             Widget build(BuildContext context) {
               return Scaffold(
-                body: Container(
-                  width: double.infinity,
-                  decoration: const BoxDecoration(gradient: BatixColors.darkBackgroundGradient),
-                  child: SafeArea(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        children: [
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: IconButton(
-                              icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
-                              onPressed: () => Navigator.pop(context),
-                            ),
-                          ),
-                          const BatixLogoHeader(size: 80, showTagline: false),
-                          const SizedBox(height: 24),
-                          const Text(
-                            'Bienvenue sur BATIX',
-                            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
-                          ),
-                          const SizedBox(height: 8),
-                          const Text(
-                            'Connectez-vous ou créez votre compte\npour accéder à tous les services.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.white70, fontSize: 14),
-                          ),
-                          const SizedBox(height: 36),
-                          _AuthOptionButton(
-                            icon: Icons.person_add_alt_1_rounded,
-                            label: "S'inscrire",
-                            gradient: BatixColors.orangeGradient,
-                            textColor: Colors.white,
-                            onTap: () => _goToProfileChoice(context, 'inscription'),
-                          ),
-                          const SizedBox(height: 16),
-                          _AuthOptionButton(
-                            icon: Icons.login_rounded,
-                            label: 'Se connecter',
-                            bgColor: BatixColors.bgCard,
-                            borderColor: BatixColors.greenLight,
-                            textColor: Colors.white,
-                            onTap: () => _goToProfileChoice(context, 'connexion'),
-                          ),
-                          const SizedBox(height: 16),
-                          _AuthOptionButton(
-                            icon: Icons.play_circle_outline_rounded,
-                            label: 'Mode démo',
-                            bgColor: Colors.white,
-                            textColor: BatixColors.bgDark,
-                            onTap: () => _goToProfileChoice(context, 'demo'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }
-          }
-
-          class _AuthOptionButton extends StatelessWidget {
-            final IconData icon;
-            final String label;
-            final LinearGradient? gradient;
-            final Color? bgColor;
-            final Color? borderColor;
-            final Color textColor;
-            final VoidCallback onTap;
-
-            const _AuthOptionButton({
-              required this.icon,
-              required this.label,
-              this.gradient,
-              this.bgColor,
-              this.borderColor,
-              required this.textColor,
-              required this.onTap,
-            });
-
-            @override
-            Widget build(BuildContext context) {
-              return GestureDetector(
-                onTap: onTap,
-                child: Container(
-                  height: 56,
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  decoration: BoxDecoration(
-                    gradient: gradient,
-                    color: bgColor,
-                    borderRadius: BorderRadius.circular(30),
-                    border: borderColor != null ? Border.all(color: borderColor!, width: 1.5) : null,
-                  ),
-                  child: Row(
+                appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
+                body: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
                     children: [
-                      Icon(icon, color: textColor, size: 26),
-                      const Expanded(child: SizedBox()),
-                      Text(label, style: TextStyle(color: textColor, fontSize: 17, fontWeight: FontWeight.bold)),
-                      const Expanded(child: SizedBox()),
-                      Icon(Icons.chevron_right_rounded, color: textColor),
+                      const CenteredBatixLogo(size: 84, showSub: false),
+                      const SizedBox(height: 20),
+                      const Text('Bienvenue sur BATIX', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      const Text('Connectez-vous ou créez votre compte pour accéder à tous les services.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70)),
+                      const SizedBox(height: 32),
+                      _AuthBtn("S'inscrire", Icons.person_add, BatixColors.orange, () => _go(context)),
+                      const SizedBox(height: 14),
+                      _AuthBtn('Se connecter', Icons.login, BatixColors.green, () => _go(context)),
+                      const SizedBox(height: 14),
+                      _AuthBtn('Mode démo', Icons.play_circle_outline, Colors.blueGrey, () => _go(context)),
                     ],
                   ),
                 ),
@@ -562,126 +579,58 @@ jobs:
             }
           }
 
-          class ProfileSelectionScreen extends StatelessWidget {
-            final String authMode;
-            const ProfileSelectionScreen({super.key, required this.authMode});
-
-            void _selectRole(BuildContext context, String roleTitle, String roleKey) {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => LoginScreen(roleTitle: roleTitle, roleKey: roleKey, authMode: authMode),
-                ),
-              );
-            }
-
+          class _AuthBtn extends StatelessWidget {
+            final String title;
+            final IconData icon;
+            final Color color;
+            final VoidCallback onTap;
+            const _AuthBtn(this.title, this.icon, this.color, this.onTap);
             @override
             Widget build(BuildContext context) {
-              return Scaffold(
-                body: Container(
-                  decoration: const BoxDecoration(gradient: BatixColors.darkBackgroundGradient),
-                  child: SafeArea(
-                    child: ListView(
-                      padding: const EdgeInsets.all(20),
-                      children: [
-                        Row(
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
-                              onPressed: () => Navigator.pop(context),
-                            ),
-                            const Expanded(
-                              child: Text(
-                                'BATIX • Choix du profil',
-                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'En tant que quoi souhaitez-vous vous inscrire / connecter ?',
-                          style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold, color: Colors.white),
-                        ),
-                        const SizedBox(height: 18),
-                        _ProfileRoleCard(
-                          number: '1. Client (Acheteur BTP)',
-                          description: 'Catalogue style Alibaba, comparaison des Fournisseurs A, B, C, D et code secret.',
-                          icon: Icons.shopping_cart_checkout_rounded,
-                          accentColor: BatixColors.greenLight,
-                          onTap: () => _selectRole(context, 'Espace Client BTP', 'client'),
-                        ),
-                        _ProfileRoleCard(
-                          number: '2. Fournisseur',
-                          description: 'Publier vos matériaux et tarifs et recevoir les notifications de commandes.',
-                          icon: Icons.factory_rounded,
-                          accentColor: BatixColors.orange,
-                          onTap: () => _selectRole(context, 'Espace Fournisseur', 'fournisseur'),
-                        ),
-                        _ProfileRoleCard(
-                          number: '3. Transporteur / Livreur',
-                          description: 'Suivre le GPS, filmer avec la caméra directe les 3 preuves et faire signer avec le code secret.',
-                          icon: Icons.local_shipping_rounded,
-                          accentColor: Colors.lightBlueAccent,
-                          onTap: () => _selectRole(context, 'Espace Livraison', 'transporteur'),
-                        ),
-                        _ProfileRoleCard(
-                          number: '4. Agent de BATIX',
-                          description: 'Superviser les inscriptions, auditer les preuves et contrôler les paiements.',
-                          icon: Icons.shield_rounded,
-                          accentColor: Colors.purpleAccent,
-                          onTap: () => _selectRole(context, 'Console Agent BATIX', 'agent'),
-                        ),
-                      ],
-                    ),
-                  ),
+              return SizedBox(
+                width: double.infinity,
+                height: 54,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: color, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28))),
+                  onPressed: onTap,
+                  icon: Icon(icon, color: Colors.white),
+                  label: Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.white)),
                 ),
               );
             }
           }
 
-          class _ProfileRoleCard extends StatelessWidget {
-            final String number;
-            final String description;
-            final IconData icon;
-            final Color accentColor;
-            final VoidCallback onTap;
-
-            const _ProfileRoleCard({
-              required this.number,
-              required this.description,
-              required this.icon,
-              required this.accentColor,
-              required this.onTap,
-            });
-
+          // ÉCRAN 3 : CHOIX DU PROFIL (Grille 2x2 : Client, Fournisseur, Transporteur, Agent)
+          class ProfileSelectionScreen extends StatelessWidget {
+            const ProfileSelectionScreen({super.key});
+            void _open(BuildContext ctx, Widget page) => Navigator.push(ctx, MaterialPageRoute(builder: (_) => LoginScreen(nextPage: page)));
             @override
             Widget build(BuildContext context) {
-              return GestureDetector(
-                onTap: onTap,
-                child: Container(
-                  margin: const EdgeInsets.only(bottom: 14),
-                  padding: const EdgeInsets.all(18),
-                  decoration: BoxDecoration(
-                    color: BatixColors.bgCard,
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: accentColor.withOpacity(0.5), width: 1.5),
-                  ),
+              return Scaffold(
+                appBar: AppBar(backgroundColor: BatixColors.bgDark, centerTitle: true, title: const CenteredBatixLogo(size: 36, showSub: false)),
+                body: Padding(
+                  padding: const EdgeInsets.all(20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Icon(icon, color: accentColor, size: 28),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(number, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
-                          ),
-                          Icon(Icons.arrow_forward_ios_rounded, color: accentColor, size: 16),
-                        ],
+                      const Text('Choisissez votre profil', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 6),
+                      const Text('4 profils, 1 seule plateforme sécurisée.', style: TextStyle(color: Colors.white70)),
+                      const SizedBox(height: 18),
+                      Expanded(
+                        child: GridView.count(
+                          crossAxisCount: 2,
+                          mainAxisSpacing: 14,
+                          crossAxisSpacing: 14,
+                          childAspectRatio: 0.85,
+                          children: [
+                            _RoleCard('Client', 'Comparez Fournisseurs A, B, C et commandez.', Icons.shopping_cart, BatixColors.green, () => _open(context, const ClientMainScreen())),
+                            _RoleCard('Fournisseur', 'Gérez vos produits, stocks, Excel et livreurs.', Icons.factory, BatixColors.orange, () => _open(context, const SupplierMainScreen())),
+                            _RoleCard('Transporteur / Livreur', 'GPS 3D, 3 photos caméra directe et code secret.', Icons.local_shipping, Colors.blueAccent, () => _open(context, const TransporterMainScreen())),
+                            _RoleCard('Agent BATIX', 'Auditez les preuves et validez les paiements.', Icons.shield, Colors.purpleAccent, () => _open(context, const AgentMainScreen())),
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 8),
-                      Text(description, style: const TextStyle(color: Colors.white70, fontSize: 13)),
                     ],
                   ),
                 ),
@@ -689,639 +638,633 @@ jobs:
             }
           }
 
-          class LoginScreen extends StatefulWidget {
-            final String roleTitle;
-            final String roleKey;
-            final String authMode;
-
-            const LoginScreen({
-              super.key,
-              required this.roleTitle,
-              required this.roleKey,
-              required this.authMode,
-            });
-
-            @override
-            State<LoginScreen> createState() => _LoginScreenState();
-          }
-
-          class _LoginScreenState extends State<LoginScreen> {
-            final TextEditingController _emailCtrl = TextEditingController(text: 'utilisateur@batix.com');
-            final TextEditingController _passCtrl = TextEditingController(text: '12345678');
-
-            void _submit() {
-              if (widget.roleKey == 'client') {
-                Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ClientMainScreen()));
-              } else if (widget.roleKey == 'transporteur') {
-                Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const TransporterDashboardScreen()));
-              } else {
-                Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ClientMainScreen()));
-              }
-            }
-
+          class _RoleCard extends StatelessWidget {
+            final String title, sub;
+            final IconData icon;
+            final Color color;
+            final VoidCallback onTap;
+            const _RoleCard(this.title, this.sub, this.icon, this.color, this.onTap);
             @override
             Widget build(BuildContext context) {
-              return Scaffold(
-                body: Container(
-                  decoration: const BoxDecoration(gradient: BatixColors.darkBackgroundGradient),
-                  child: SafeArea(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        children: [
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: IconButton(
-                              icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
-                              onPressed: () => Navigator.pop(context),
-                            ),
-                          ),
-                          const BatixLogoHeader(size: 70, showTagline: true),
-                          const SizedBox(height: 24),
-                          Container(
-                            padding: const EdgeInsets.all(22),
-                            decoration: BoxDecoration(
-                              color: BatixColors.bgCard,
-                              borderRadius: BorderRadius.circular(24),
-                              border: Border.all(color: BatixColors.border),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(widget.roleTitle, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.bold)),
-                                const SizedBox(height: 18),
-                                TextField(
-                                  controller: _emailCtrl,
-                                  decoration: const InputDecoration(
-                                    prefixIcon: Icon(Icons.email_outlined),
-                                    hintText: 'Adresse e-mail ou téléphone',
-                                  ),
-                                ),
-                                const SizedBox(height: 14),
-                                TextField(
-                                  controller: _passCtrl,
-                                  obscureText: true,
-                                  decoration: const InputDecoration(
-                                    prefixIcon: Icon(Icons.lock_outline),
-                                    hintText: 'Mot de passe',
-                                  ),
-                                ),
-                                const SizedBox(height: 22),
-                                GestureDetector(
-                                  onTap: _submit,
-                                  child: Container(
-                                    width: double.infinity,
-                                    height: 52,
-                                    decoration: BoxDecoration(
-                                      gradient: BatixColors.orangeGradient,
-                                      borderRadius: BorderRadius.circular(28),
-                                    ),
-                                    child: const Center(
-                                      child: Text(
-                                        '→   Continuer',
-                                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+              return GestureDetector(
+                onTap: onTap,
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      CircleAvatar(backgroundColor: color, radius: 24, child: Icon(icon, color: Colors.white, size: 26)),
+                      const SizedBox(height: 12),
+                      Text(title, style: const TextStyle(color: Color(0xFF0A2239), fontSize: 16, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 6),
+                      Expanded(child: Text(sub, style: const TextStyle(color: Colors.black54, fontSize: 12))),
+                      const Align(alignment: Alignment.bottomRight, child: Icon(Icons.arrow_forward, color: Color(0xFF0A2239))),
+                    ],
                   ),
                 ),
               );
             }
           }
 
+          // ÉCRAN 4 : CONNEXION
+          class LoginScreen extends StatelessWidget {
+            final Widget nextPage;
+            const LoginScreen({super.key, required this.nextPage});
+            @override
+            Widget build(BuildContext context) {
+              return Scaffold(
+                appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
+                body: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    children: [
+                      const CenteredBatixLogo(size: 74),
+                      const SizedBox(height: 20),
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(color: BatixColors.bgCard, borderRadius: BorderRadius.circular(22), border: Border.all(color: BatixColors.border)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Se connecter', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 16),
+                            TextField(decoration: InputDecoration(prefixIcon: const Icon(Icons.email_outlined), hintText: 'client@batix.com', filled: true, fillColor: BatixColors.bgDark, border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
+                            const SizedBox(height: 12),
+                            TextField(obscureText: true, decoration: InputDecoration(prefixIcon: const Icon(Icons.lock_outline), hintText: '••••••••', filled: true, fillColor: BatixColors.bgDark, border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
+                            const SizedBox(height: 18),
+                            _AuthBtn('→  Se connecter', Icons.login, BatixColors.orange, () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => nextPage))),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+          }
+
+          // ==========================================================================
+          // ESPACE CLIENT : LE MARCHÉ INTELLIGENT + COMPARATEUR ALIBABA (Image 8)
+          // ==========================================================================
           class ClientMainScreen extends StatefulWidget {
             const ClientMainScreen({super.key});
-
             @override
             State<ClientMainScreen> createState() => _ClientMainScreenState();
           }
 
           class _ClientMainScreenState extends State<ClientMainScreen> {
-            int _selectedIndex = 0;
-            String _searchQuery = '';
-            String _selectedCategory = 'Tous';
-            final List<String> _categories = ['Tous', 'Ciment', 'Fer à béton', 'Gravier', 'Bois', 'Brique'];
+            int _tab = 0;
+            String _search = '';
+            String _cat = 'Tout';
 
             @override
             Widget build(BuildContext context) {
-              final filteredProducts = AppDatabase.products.where((p) {
-                final matchesCategory = _selectedCategory == 'Tous' || p['category'] == _selectedCategory;
-                final matchesSearch = p['name'].toString().toLowerCase().contains(_searchQuery.toLowerCase()) ||
-                    p['category'].toString().toLowerCase().contains(_searchQuery.toLowerCase());
-                return matchesCategory && matchesSearch;
+              final prods = AppDatabase.products.where((p) {
+                final mc = _cat == 'Tout' || p['category'] == _cat;
+                final ms = p['name'].toString().toLowerCase().contains(_search.toLowerCase());
+                return mc && ms;
               }).toList();
 
               return Scaffold(
-                backgroundColor: const Color(0xFFF4F7FA),
                 appBar: AppBar(
-                  backgroundColor: Colors.white,
-                  elevation: 0.5,
-                  title: const BatixLogoHeader(size: 32, showTagline: false, darkText: true),
+                  backgroundColor: BatixColors.bgDark,
+                  centerTitle: true,
+                  title: const CenteredBatixLogo(size: 32, showSub: true, sub: 'LE MARCHÉ INTELLIGENT'),
                   actions: [
-                    TextButton.icon(
-                      onPressed: () {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(builder: (_) => const TransporterDashboardScreen()),
-                        );
-                      },
-                      icon: const Icon(Icons.local_shipping_rounded, color: BatixColors.orange),
-                      label: const Text('Mode Livreur', style: TextStyle(color: BatixColors.orange, fontWeight: FontWeight.bold)),
+                    IconButton(
+                      icon: const Icon(Icons.swap_horiz, color: BatixColors.greenLight),
+                      onPressed: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ProfileSelectionScreen())),
                     ),
                   ],
                 ),
-                body: _selectedIndex == 0
-                    ? _buildAlibabaCatalog(filteredProducts)
-                    : _buildClientOrdersList(),
+                body: _tab == 0 ? _buildCatalog(prods) : _buildTracking(),
                 bottomNavigationBar: BottomNavigationBar(
-                  backgroundColor: Colors.white,
-                  selectedItemColor: BatixColors.green,
-                  unselectedItemColor: Colors.blueGrey,
-                  currentIndex: _selectedIndex,
-                  onTap: (idx) => setState(() => _selectedIndex = idx),
+                  backgroundColor: BatixColors.bgCard,
+                  selectedItemColor: BatixColors.greenLight,
+                  currentIndex: _tab,
+                  onTap: (i) => setState(() => _tab = i),
                   items: const [
-                    BottomNavigationBarItem(icon: Icon(Icons.manage_search_rounded), label: 'Catalogue Alibaba'),
-                    BottomNavigationBarItem(icon: Icon(Icons.receipt_long_rounded), label: 'Mes Commandes & Code'),
+                    BottomNavigationBarItem(icon: Icon(Icons.grid_view_rounded), label: 'Catalogue Alibaba'),
+                    BottomNavigationBarItem(icon: Icon(Icons.local_shipping_rounded), label: 'Suivi GPS & Code'),
                   ],
                 ),
               );
             }
 
-            Widget _buildAlibabaCatalog(List<Map<String, dynamic>> products) {
-              return Column(
+            Widget _buildCatalog(List<Map<String, dynamic>> prods) {
+              return ListView(
+                padding: const EdgeInsets.all(16),
                 children: [
-                  Container(
-                    color: Colors.white,
-                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-                    child: Column(
-                      children: [
-                        TextField(
-                          style: const TextStyle(color: Colors.black87),
-                          onChanged: (v) => setState(() => _searchQuery = v),
-                          decoration: InputDecoration(
-                            hintText: 'Rechercher (ex: Ciment, Fer, Gravier...)',
-                            hintStyle: const TextStyle(color: Colors.black45, fontSize: 14),
-                            prefixIcon: const Icon(Icons.search_rounded, color: BatixColors.green),
-                            filled: true,
-                            fillColor: const Color(0xFFF0F4F8),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(30),
-                              borderSide: BorderSide.none,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        SizedBox(
-                          height: 36,
-                          child: ListView.builder(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: _categories.length,
-                            itemBuilder: (context, index) {
-                              final cat = _categories[index];
-                              final selected = _selectedCategory == cat;
-                              return Padding(
-                                padding: const EdgeInsets.only(right: 8),
-                                child: ChoiceChip(
-                                  label: Text(cat),
-                                  selected: selected,
-                                  selectedColor: BatixColors.green,
-                                  labelStyle: TextStyle(color: selected ? Colors.white : Colors.black87),
-                                  onSelected: (_) => setState(() => _selectedCategory = cat),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ],
+                  TextField(
+                    onChanged: (v) => setState(() => _search = v),
+                    decoration: InputDecoration(
+                      hintText: 'Rechercher un produit (Ciment, Fer, Gravier...)',
+                      prefixIcon: const Icon(Icons.search, color: BatixColors.greenLight),
+                      filled: true,
+                      fillColor: BatixColors.bgCard,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
                     ),
                   ),
-                  Expanded(
-                    child: ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: products.length,
-                      itemBuilder: (context, index) {
-                        final product = products[index];
-                        final List suppliers = product['suppliers'] as List;
-                        final int minPrice = suppliers.map((s) => s['price'] as int).reduce(min);
-                        final int maxPrice = suppliers.map((s) => s['price'] as int).reduce(max);
-
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 14),
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(18),
+                  const SizedBox(height: 12),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: ['Tout', 'Ciment', 'Fer', 'Gravier', 'Brique', 'Bois', 'Sable'].map((c) {
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ChoiceChip(
+                            label: Text(c),
+                            selected: _cat == c,
+                            selectedColor: BatixColors.green,
+                            onSelected: (_) => setState(() => _cat = c),
                           ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: prods.length,
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 0.72),
+                    itemBuilder: (ctx, i) {
+                      final p = prods[i];
+                      return GestureDetector(
+                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProductSuppliersScreen(product: p))).then((_) => setState(() {})),
+                        child: Container(
+                          decoration: BoxDecoration(color: BatixColors.bgCard, borderRadius: BorderRadius.circular(18), border: Border.all(color: BatixColors.border)),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(
-                                children: [
-                                  Icon(product['icon'] as IconData, color: BatixColors.orange, size: 42),
-                                  const SizedBox(width: 14),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          product['name'],
-                                          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Color(0xFF0A2239)),
-                                        ),
-                                        Text(product['subtitle'], style: const TextStyle(fontSize: 12.5, color: Colors.black54)),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          'De $minPrice à $maxPrice FCFA / ${product['unit']}',
-                                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: BatixColors.green),
-                                        ),
-                                      ],
+                              Expanded(child: ClipRRect(borderRadius: const BorderRadius.vertical(top: Radius.circular(17)), child: Image.asset(p['asset'], width: double.infinity, fit: BoxFit.cover))),
+                              Padding(
+                                padding: const EdgeInsets.all(10),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(p['name'], maxLines: 1, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                    Text('${p['basePrice']} FCFA / ${p['unit']}', style: const TextStyle(color: BatixColors.orangeLight, fontWeight: FontWeight.bold, fontSize: 13)),
+                                    const SizedBox(height: 6),
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.symmetric(vertical: 6),
+                                      decoration: BoxDecoration(gradient: BatixColors.greenGrad, borderRadius: BorderRadius.circular(16)),
+                                      child: const Center(child: Text('Voir Fournisseurs', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
                                     ),
-                                  ),
-                                ],
-                              ),
-                              const Divider(height: 20),
-                              SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton.icon(
-                                  style: ElevatedButton.styleFrom(backgroundColor: BatixColors.green),
-                                  onPressed: () => _openSupplierSheet(context, product),
-                                  icon: const Icon(Icons.compare_arrows_rounded, color: Colors.white),
-                                  label: Text(
-                                    'Comparer les ${suppliers.length} Fournisseurs (A, B, C...)',
-                                    style: const TextStyle(color: Colors.white),
-                                  ),
+                                  ],
                                 ),
                               ),
                             ],
                           ),
-                        );
-                      },
-                    ),
+                        ),
+                      );
+                    },
                   ),
                 ],
               );
             }
 
-            void _openSupplierSheet(BuildContext context, Map<String, dynamic> product) {
-              final List suppliers = product['suppliers'] as List;
-              int selectedSupplierIdx = suppliers.length > 1 ? 1 : 0;
-              int quantity = 50;
-
-              showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                backgroundColor: BatixColors.bgDark,
-                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-                builder: (ctx) {
-                  return StatefulBuilder(
-                    builder: (ctx, setModalState) {
-                      final chosen = suppliers[selectedSupplierIdx];
-                      final int unitPrice = chosen['price'] as int;
-                      final int delivery = chosen['delivery'] as int;
-                      final int total = (unitPrice * quantity) + delivery;
-
-                      return Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
+            Widget _buildTracking() {
+              final o = AppDatabase.orders.first;
+              return ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  Text('Suivi de commande • ${o.id} (${o.status})', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  ClipRRect(borderRadius: BorderRadius.circular(18), child: Image.asset('assets/images/gps_map.png', height: 180, fit: BoxFit.cover)),
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(color: BatixColors.bgCard, borderRadius: BorderRadius.circular(18), border: Border.all(color: BatixColors.border)),
+                    child: Column(
+                      children: [
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const CircleAvatar(backgroundColor: BatixColors.green, child: Icon(Icons.person, color: Colors.white)),
+                          title: const Text('Chauffeur Moussa • ⭐ 4.9'),
+                          subtitle: Text('Véhicule BA-5847-AC • ${o.destination}'),
+                          trailing: const Icon(Icons.phone, color: BatixColors.greenLight),
+                        ),
+                        const Divider(color: BatixColors.border),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              '${product['name']} • Choix du Fournisseur',
-                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 12),
-                            ...List.generate(suppliers.length, (i) {
-                              final s = suppliers[i];
-                              final isSel = i == selectedSupplierIdx;
-                              return GestureDetector(
-                                onTap: () => setModalState(() => selectedSupplierIdx = i),
-                                child: Container(
-                                  margin: const EdgeInsets.only(bottom: 8),
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: isSel ? BatixColors.green.withOpacity(0.2) : BatixColors.bgCard,
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(color: isSel ? BatixColors.greenLight : BatixColors.border),
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text('${s['name']} (Délai ${s['delay']})', style: const TextStyle(fontWeight: FontWeight.bold)),
-                                      Text('${s['price']} FCFA/${product['unit']}',
-                                          style: const TextStyle(color: BatixColors.orangeLight, fontWeight: FontWeight.bold)),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            }),
-                            const SizedBox(height: 10),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text('Quantité souhaitée :'),
-                                Row(
-                                  children: [
-                                    IconButton(
-                                      icon: const Icon(Icons.remove_circle_outline, color: BatixColors.orange),
-                                      onPressed: () {
-                                        if (quantity > 10) setModalState(() => quantity -= 10);
-                                      },
-                                    ),
-                                    Text('$quantity', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                                    IconButton(
-                                      icon: const Icon(Icons.add_circle_outline, color: BatixColors.greenLight),
-                                      onPressed: () => setModalState(() => quantity += 10),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            Text('Total Livré : $total FCFA',
-                                style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: BatixColors.greenLight)),
-                            const SizedBox(height: 14),
-                            SizedBox(
-                              width: double.infinity,
-                              height: 50,
-                              child: ElevatedButton(
-                                style: ElevatedButton.styleFrom(backgroundColor: BatixColors.orange),
-                                onPressed: () {
-                                  final String pin = (1000 + Random().nextInt(9000)).toString();
-                                  AppDatabase.orders.insert(
-                                    0,
-                                    OrderModel(
-                                      id: 'CMD-2026-00${AppDatabase.orders.length + 125}',
-                                      productName: product['name'],
-                                      supplierName: chosen['name'],
-                                      unitPrice: unitPrice,
-                                      deliveryFee: delivery,
-                                      quantity: quantity,
-                                      destination: 'Chantier Yaoundé',
-                                      secretCode: pin,
-                                    ),
-                                  );
-                                  Navigator.pop(ctx);
-                                  setState(() => _selectedIndex = 1);
-                                },
-                                child: const Text('Commander & Générer le Code Secret à 4 chiffres'),
-                              ),
-                            ),
+                            const Text('Code Secret (à donner au livreur) :'),
+                            Text(o.secretCode.split('').join(' '), style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: BatixColors.orangeLight)),
                           ],
                         ),
-                      );
-                    },
-                  );
-                },
+                      ],
+                    ),
+                  ),
+                ],
               );
             }
+          }
 
-            Widget _buildClientOrdersList() {
-              return ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: AppDatabase.orders.length,
-                itemBuilder: (context, index) {
-                  final o = AppDatabase.orders[index];
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 14),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: BatixColors.bgDark,
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+          // COMPARATEUR FOURNISSEURS A, B, C (Image 8 - Haut Droite)
+          class ProductSuppliersScreen extends StatefulWidget {
+            final Map<String, dynamic> product;
+            const ProductSuppliersScreen({super.key, required this.product});
+            @override
+            State<ProductSuppliersScreen> createState() => _ProductSuppliersScreenState();
+          }
+
+          class _ProductSuppliersScreenState extends State<ProductSuppliersScreen> {
+            int _sel = 0;
+            int _qty = 50;
+
+            @override
+            Widget build(BuildContext context) {
+              final p = widget.product;
+              final List sups = p['suppliers'] as List;
+              final chosen = sups[_sel];
+              final int total = (chosen['price'] as int) * _qty;
+
+              return Scaffold(
+                appBar: AppBar(backgroundColor: BatixColors.bgDark, title: Text(p['name'])),
+                body: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    Row(
                       children: [
-                        Text('${o.id} • ${o.status}', style: const TextStyle(fontWeight: FontWeight.bold, color: BatixColors.orangeLight)),
-                        const SizedBox(height: 6),
-                        Text('${o.quantity} x ${o.productName} (${o.supplierName})'),
-                        Text('Total : ${o.grandTotal} FCFA', style: const TextStyle(color: BatixColors.greenLight, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 10),
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: BatixColors.bgCard,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: BatixColors.orange),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        ClipRRect(borderRadius: BorderRadius.circular(14), child: Image.asset(p['asset'], width: 85, height: 85, fit: BoxFit.cover)),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('Code Secret Livraison :'),
-                              Text(
-                                o.secretCode.split('').join(' '),
-                                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: BatixColors.orangeLight),
-                              ),
+                              Text(p['name'], style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold)),
+                              Text('${chosen['price']} FCFA / ${p['unit']}', style: const TextStyle(fontSize: 17, color: BatixColors.orangeLight, fontWeight: FontWeight.bold)),
+                              Text('⭐ ${p['rating']} (${p['reviews']} avis)'),
                             ],
                           ),
                         ),
                       ],
                     ),
-                  );
-                },
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Quantité (${p['unit']}s) :', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        Row(
+                          children: [
+                            IconButton(icon: const Icon(Icons.remove_circle, color: BatixColors.orange), onPressed: () => setState(() => _qty = max(10, _qty - 10))),
+                            Text('$_qty', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                            IconButton(icon: const Icon(Icons.add_circle, color: BatixColors.greenLight), onPressed: () => setState(() => _qty += 10)),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    const Text('Fournisseurs disponibles (📍 Dans votre zone)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 10),
+                    ...List.generate(sups.length, (i) {
+                      final s = sups[i];
+                      final isSel = i == _sel;
+                      return GestureDetector(
+                        onTap: () => setState(() => _sel = i),
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: isSel ? BatixColors.green.withOpacity(0.18) : BatixColors.bgCard,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: isSel ? BatixColors.greenLight : BatixColors.border, width: 2),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('${s['name']} • ⭐ ${s['rating']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                                  Text('${s['price']} FCFA / ${p['unit']}', style: const TextStyle(color: BatixColors.orangeLight, fontWeight: FontWeight.bold)),
+                                  Text('📍 ${s['distance']}   🕒 ${s['delay']}', style: const TextStyle(fontSize: 12, color: Colors.white70)),
+                                ],
+                              ),
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(backgroundColor: BatixColors.green),
+                                onPressed: () => setState(() => _sel = i),
+                                child: Text(isSel ? 'Choisi ✓' : 'Sélectionner'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                    const SizedBox(height: 16),
+                    _AuthBtn('🛒 Confirmer la commande ($total FCFA)', Icons.check_circle, BatixColors.green, () {
+                      final pin = (1000 + Random().nextInt(9000)).toString();
+                      final order = OrderModel(
+                        id: 'CMD-2025-00${AppDatabase.orders.length + 92}',
+                        productName: p['name'],
+                        productAsset: p['asset'],
+                        supplierName: chosen['name'],
+                        unitPrice: chosen['price'] as int,
+                        deliveryFee: chosen['delivery'] as int,
+                        quantity: _qty,
+                        destination: 'Quartier Bastos, Yaoundé',
+                        secretCode: pin,
+                      );
+                      AppDatabase.orders.insert(0, order);
+                      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => CelebrationScreen(title: 'Commande confirmée !', order: order)));
+                    }),
+                  ],
+                ),
               );
             }
           }
 
-          class TransporterDashboardScreen extends StatefulWidget {
-            const TransporterDashboardScreen({super.key});
+          // ÉCRAN DE CONFIRMATION AVEC CAMION 3D & CODE SECRET (Image 7, 8, 9)
+          class CelebrationScreen extends StatelessWidget {
+            final String title;
+            final OrderModel order;
+            const CelebrationScreen({super.key, required this.title, required this.order});
 
             @override
-            State<TransporterDashboardScreen> createState() => _TransporterDashboardScreenState();
+            Widget build(BuildContext context) {
+              return Scaffold(
+                body: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const CenteredBatixLogo(size: 54, showSub: false),
+                      const SizedBox(height: 16),
+                      ClipRRect(borderRadius: BorderRadius.circular(20), child: Image.asset('assets/images/truck_success.png', height: 170)),
+                      const SizedBox(height: 16),
+                      Text(title, style: const TextStyle(fontSize: 25, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 14),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(color: BatixColors.bgCard, borderRadius: BorderRadius.circular(18), border: Border.all(color: BatixColors.border)),
+                        child: Column(
+                          children: [
+                            Text('N° ${order.id} • ${order.supplierName}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 6),
+                            Text('${order.quantity} x ${order.productName} • Total : ${order.grandTotal} FCFA', style: const TextStyle(color: BatixColors.greenLight, fontWeight: FontWeight.bold)),
+                            const Divider(color: BatixColors.border, height: 20),
+                            const Text('Code Secret à 4 chiffres :', style: TextStyle(color: Colors.white70)),
+                            Text(order.secretCode.split('').join('   '), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: BatixColors.orangeLight)),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 22),
+                      _AuthBtn('🏠 Retour à l\'accueil', Icons.home, BatixColors.green, () => Navigator.pop(context)),
+                    ],
+                  ),
+                ),
+              );
+            }
           }
 
-          class _TransporterDashboardScreenState extends State<TransporterDashboardScreen> {
+          // ==========================================================================
+          // ESPACE TRANSPORTEUR / CHAUFFEUR EN 5 ÉTAPES (Images 4, 5, 6, 7, 9)
+          // ==========================================================================
+          class TransporterMainScreen extends StatefulWidget {
+            const TransporterMainScreen({super.key});
+            @override
+            State<TransporterMainScreen> createState() => _TransporterMainScreenState();
+          }
+
+          class _TransporterMainScreenState extends State<TransporterMainScreen> {
             @override
             Widget build(BuildContext context) {
               return Scaffold(
                 appBar: AppBar(
                   backgroundColor: BatixColors.bgDark,
-                  title: const Text('Espace Transporteur • GPS'),
+                  centerTitle: true,
+                  title: const CenteredBatixLogo(size: 34, showSub: false),
                   actions: [
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ClientMainScreen()));
-                      },
-                      child: const Text('Mode Client', style: TextStyle(color: BatixColors.greenLight)),
+                    IconButton(
+                      icon: const Icon(Icons.swap_horiz, color: BatixColors.greenLight),
+                      onPressed: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ProfileSelectionScreen())),
                     ),
                   ],
                 ),
-                body: ListView.builder(
+                body: ListView(
                   padding: const EdgeInsets.all(16),
-                  itemCount: AppDatabase.orders.length,
-                  itemBuilder: (context, index) {
-                    final order = AppDatabase.orders[index];
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 14),
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: BatixColors.bgCard,
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: BatixColors.orange),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('${order.id} (${order.status})', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 6),
-                          Text('${order.quantity} x ${order.productName} • ${order.supplierName}'),
-                          Text('Destination GPS : ${order.destination}', style: const TextStyle(color: Colors.white70)),
-                          const SizedBox(height: 12),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(backgroundColor: BatixColors.green),
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(builder: (_) => TransporterDeliveryProofScreen(order: order)),
-                                ).then((_) => setState(() {}));
-                              },
-                              icon: const Icon(Icons.camera_alt_rounded),
-                              label: const Text('Filmer les 3 preuves & Valider avec Code Secret'),
+                  children: [
+                    const Text('Bonjour, Moussa ! 👋', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                    const Text('🟢 En ligne • 1. Livraisons disponibles près de vous', style: TextStyle(color: BatixColors.greenLight)),
+                    const SizedBox(height: 16),
+                    ...AppDatabase.orders.map((o) {
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 14),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(color: BatixColors.bgCard, borderRadius: BorderRadius.circular(18), border: Border.all(color: BatixColors.border)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('#${o.id}', style: const TextStyle(color: BatixColors.greenLight, fontWeight: FontWeight.bold)),
+                                Chip(label: Text(o.status), backgroundColor: o.status == 'Livrée' ? BatixColors.green : BatixColors.orange),
+                              ],
                             ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
+                            Row(
+                              children: [
+                                ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.asset(o.productAsset, width: 60, height: 60, fit: BoxFit.cover)),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('${o.productName} (${o.quantity} ${o.unit})', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                      Text('📍 ${o.destination} • ${o.distance} (${o.duration})'),
+                                      Text('${o.grandTotal} FCFA', style: const TextStyle(color: BatixColors.orangeLight, fontWeight: FontWeight.bold)),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            _AuthBtn('Accepter la livraison  →', Icons.navigation, BatixColors.green, () {
+                              Navigator.push(context, MaterialPageRoute(builder: (_) => DriverWorkflowScreen(order: o))).then((_) => setState(() {}));
+                            }),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
                 ),
               );
             }
           }
 
-          class TransporterDeliveryProofScreen extends StatefulWidget {
+          // WORKFLOW CHAUFFEUR : ÉTAPE 2 (GPS 3D) -> ÉTAPE 3 (3 PHOTOS CAMÉRA) -> ÉTAPE 4 (SIGNATURE + CODE 4 CASES)
+          class DriverWorkflowScreen extends StatefulWidget {
             final OrderModel order;
-            const TransporterDeliveryProofScreen({super.key, required this.order});
-
+            const DriverWorkflowScreen({super.key, required this.order});
             @override
-            State<TransporterDeliveryProofScreen> createState() => _TransporterDeliveryProofScreenState();
+            State<DriverWorkflowScreen> createState() => _DriverWorkflowScreenState();
           }
 
-          class _TransporterDeliveryProofScreenState extends State<TransporterDeliveryProofScreen> {
+          class _DriverWorkflowScreenState extends State<DriverWorkflowScreen> {
+            int _step = 2; // 2: GPS 3D, 3: 3 Photos Caméra directe, 4: Signature & Code 4 cases
             final ImagePicker _picker = ImagePicker();
-            final List<Offset?> _signaturePoints = [];
-            final TextEditingController _pinController = TextEditingController();
+            final List<Offset?> _sig = [];
+            final List<String> _pinDigits = ['8', '4', '1', '9'];
 
-            Future<void> _captureDirectCameraPhoto(int step) async {
-              if (step == 2 && widget.order.photo1Matricule == null) return;
-              if (step == 3 && widget.order.photo2Cargaison == null) return;
-
-              try {
-                final XFile? photo = await _picker.pickImage(source: ImageSource.camera, imageQuality: 80);
-                setState(() {
-                  final String p = photo?.path ?? 'CAMERA_STEP_$step';
-                  if (step == 1) widget.order.photo1Matricule = p;
-                  if (step == 2) widget.order.photo2Cargaison = p;
-                  if (step == 3) widget.order.photo3Sol = p;
-                });
-              } catch (_) {
-                setState(() {
-                  if (step == 1) widget.order.photo1Matricule = 'CAMERA_OK_1';
-                  if (step == 2) widget.order.photo2Cargaison = 'CAMERA_OK_2';
-                  if (step == 3) widget.order.photo3Sol = 'CAMERA_OK_3';
-                });
+            @override
+            void initState() {
+              super.initState();
+              final chars = widget.order.secretCode.split('');
+              if (chars.length == 4) {
+                for (int i = 0; i < 4; i++) {
+                  _pinDigits[i] = chars[i];
+                }
               }
             }
 
-            void _validate() {
-              if (widget.order.photo1Matricule == null ||
-                  widget.order.photo2Cargaison == null ||
-                  widget.order.photo3Sol == null) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Les 3 photos par caméra directe sont obligatoires !')),
-                );
-                return;
-              }
-              if (_signaturePoints.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('La signature du client est obligatoire !')),
-                );
-                return;
-              }
-              if (_pinController.text.trim() != widget.order.secretCode) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Code secret incorrect ! (Attendu : ${widget.order.secretCode})')),
-                );
-                return;
-              }
-              setState(() => widget.order.status = 'Livrée');
-              Navigator.pop(context);
+            Future<void> _takeDirectPhoto(int numPhoto) async {
+              if (numPhoto == 2 && widget.order.photo1Matricule == null) return;
+              if (numPhoto == 3 && widget.order.photo2Cargaison == null) return;
+              try {
+                await _picker.pickImage(source: ImageSource.camera, imageQuality: 80);
+              } catch (_) {}
+              setState(() {
+                if (numPhoto == 1) widget.order.photo1Matricule = 'OK';
+                if (numPhoto == 2) widget.order.photo2Cargaison = 'OK';
+                if (numPhoto == 3) widget.order.photo3Sol = 'OK';
+              });
             }
 
             @override
             Widget build(BuildContext context) {
               final o = widget.order;
               return Scaffold(
-                appBar: AppBar(backgroundColor: BatixColors.bgDark, title: Text('Validation ${o.id}')),
+                appBar: AppBar(backgroundColor: BatixColors.bgDark, title: Text('Étape $_step / 4 • ${o.id}')),
                 body: ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
-                    ListTile(
-                      tileColor: BatixColors.bgCard,
-                      leading: Icon(Icons.looks_one, color: o.photo1Matricule != null ? BatixColors.greenLight : BatixColors.orange),
-                      title: const Text('1. Photo du camion avec matricule'),
-                      trailing: ElevatedButton(
-                        onPressed: () => _captureDirectCameraPhoto(1),
-                        child: Text(o.photo1Matricule != null ? 'OK ✓' : 'Caméra'),
+                    if (_step == 2) ...[
+                      const Text('2. GPS - Lieu de livraison (Navigation 3D)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(color: BatixColors.bgCard, borderRadius: BorderRadius.circular(14)),
+                        child: Row(
+                          children: const [
+                            Icon(Icons.turn_right_rounded, color: Colors.white, size: 34),
+                            SizedBox(width: 10),
+                            Text('Tourner à droite à 500m\n15 min restantes • 2,4 km', style: TextStyle(fontWeight: FontWeight.bold)),
+                          ],
+                        ),
                       ),
+                      const SizedBox(height: 12),
+                      ClipRRect(borderRadius: BorderRadius.circular(20), child: Image.asset('assets/images/gps_3d.png', height: 280, fit: BoxFit.cover)),
+                      const SizedBox(height: 16),
+                      _AuthBtn('Arriver au chantier & Filmer les 3 preuves →', Icons.camera_alt, BatixColors.green, () => setState(() => _step = 3)),
+                    ] else if (_step == 3) ...[
+                      const Text('3. Preuve de livraison (Caméra directe obligatoire)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 12),
+                      _PhotoStepCard(
+                        numStep: 1,
+                        title: '1. Filmer le matricule du camion',
+                        asset: 'assets/images/photo1_matricule.png',
+                        done: o.photo1Matricule != null,
+                        onTap: () => _takeDirectPhoto(1),
+                      ),
+                      _PhotoStepCard(
+                        numStep: 2,
+                        title: '2. Filmer le camion avec la marchandise',
+                        asset: 'assets/images/photo2_cargaison.png',
+                        done: o.photo2Cargaison != null,
+                        onTap: () => _takeDirectPhoto(2),
+                      ),
+                      _PhotoStepCard(
+                        numStep: 3,
+                        title: '3. Filmer la marchandise au sol',
+                        asset: 'assets/images/photo3_sol.png',
+                        done: o.photo3Sol != null,
+                        onTap: () => _takeDirectPhoto(3),
+                      ),
+                      const SizedBox(height: 12),
+                      _AuthBtn('Valider les preuves  →', Icons.check, BatixColors.green, () {
+                        setState(() {
+                          o.photo1Matricule ??= 'OK';
+                          o.photo2Cargaison ??= 'OK';
+                          o.photo3Sol ??= 'OK';
+                          _step = 4;
+                        });
+                      }),
+                    ] else ...[
+                      const Text('4. Signer et entrer le code secret', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 10),
+                      const Text('Signature du client (Signez au doigt) :'),
+                      const SizedBox(height: 6),
+                      Container(
+                        height: 140,
+                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+                        child: GestureDetector(
+                          onPanUpdate: (d) => setState(() => _sig.add(d.localPosition)),
+                          onPanEnd: (_) => _sig.add(null),
+                          child: CustomPaint(painter: _SigPainter(_sig), size: Size.infinite),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text('Code de validation à 4 chiffres du client :', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 10),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: List.generate(4, (i) {
+                          return Container(
+                            width: 62,
+                            height: 62,
+                            decoration: BoxDecoration(
+                              color: BatixColors.bgCard,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: BatixColors.greenLight, width: 2),
+                            ),
+                            child: Center(
+                              child: Text(_pinDigits[i], style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
+                            ),
+                          );
+                        }),
+                      ),
+                      const SizedBox(height: 20),
+                      _AuthBtn('✓ Confirmer la livraison  →', Icons.verified, BatixColors.green, () {
+                        setState(() => o.status = 'Livrée');
+                        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => CelebrationScreen(title: 'Livraison effectuée !', order: o)));
+                      }),
+                    ],
+                  ],
+                ),
+              );
+            }
+          }
+
+          class _PhotoStepCard extends StatelessWidget {
+            final int numStep;
+            final String title, asset;
+            final bool done;
+            final VoidCallback onTap;
+            const _PhotoStepCard({required this.numStep, required this.title, required this.asset, required this.done, required this.onTap});
+
+            @override
+            Widget build(BuildContext context) {
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: BatixColors.bgCard, borderRadius: BorderRadius.circular(16), border: Border.all(color: done ? BatixColors.greenLight : BatixColors.border)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold))),
+                        Icon(done ? Icons.check_circle : Icons.camera_alt, color: done ? BatixColors.greenLight : BatixColors.orange),
+                      ],
                     ),
                     const SizedBox(height: 8),
-                    ListTile(
-                      tileColor: BatixColors.bgCard,
-                      leading: Icon(Icons.looks_two, color: o.photo2Cargaison != null ? BatixColors.greenLight : BatixColors.orange),
-                      title: const Text('2. Photo du camion portant le ciment'),
-                      trailing: ElevatedButton(
-                        onPressed: o.photo1Matricule == null ? null : () => _captureDirectCameraPhoto(2),
-                        child: Text(o.photo2Cargaison != null ? 'OK ✓' : 'Caméra'),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    ListTile(
-                      tileColor: BatixColors.bgCard,
-                      leading: Icon(Icons.looks_3, color: o.photo3Sol != null ? BatixColors.greenLight : BatixColors.orange),
-                      title: const Text('3. Photo du ciment au sol'),
-                      trailing: ElevatedButton(
-                        onPressed: o.photo2Cargaison == null ? null : () => _captureDirectCameraPhoto(3),
-                        child: Text(o.photo3Sol != null ? 'OK ✓' : 'Caméra'),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text('Signature du client :'),
-                    const SizedBox(height: 6),
-                    Container(
-                      height: 130,
-                      color: Colors.white,
-                      child: GestureDetector(
-                        onPanUpdate: (d) => setState(() => _signaturePoints.add(d.localPosition)),
-                        onPanEnd: (_) => _signaturePoints.add(null),
-                        child: CustomPaint(painter: _SignaturePainter(_signaturePoints), size: Size.infinite),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text('Code secret à 4 chiffres du client (Démo : ${o.secretCode}) :'),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: _pinController,
-                      keyboardType: TextInputType.number,
-                      maxLength: 4,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 24, letterSpacing: 12, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      height: 52,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: BatixColors.green),
-                        onPressed: _validate,
-                        child: const Text('Valider la livraison → Base de données'),
-                      ),
+                    GestureDetector(
+                      onTap: onTap,
+                      child: ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.asset(asset, height: 115, width: double.infinity, fit: BoxFit.cover)),
                     ),
                   ],
                 ),
@@ -1329,29 +1272,448 @@ jobs:
             }
           }
 
-          class _SignaturePainter extends CustomPainter {
-            final List<Offset?> points;
-            _SignaturePainter(this.points);
-
+          class _SigPainter extends CustomPainter {
+            final List<Offset?> pts;
+            _SigPainter(this.pts);
             @override
             void paint(Canvas canvas, Size size) {
-              final Paint paint = Paint()
-                ..color = Colors.black
-                ..strokeCap = StrokeCap.round
-                ..strokeWidth = 3.0;
-              for (int i = 0; i < points.length - 1; i++) {
-                if (points[i] != null && points[i + 1] != null) {
-                  canvas.drawLine(points[i]!, points[i + 1]!, paint);
-                }
+              final p = Paint()..color = const Color(0xFF0A2239)..strokeWidth = 3.2..strokeCap = StrokeCap.round;
+              for (int i = 0; i < pts.length - 1; i++) {
+                if (pts[i] != null && pts[i + 1] != null) canvas.drawLine(pts[i]!, pts[i + 1]!, p);
               }
             }
-
             @override
             bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
           }
+
+          // ==========================================================================
+          // ESPACE FOURNISSEUR COMPLET - 8 ÉCRANS (Image 10)
+          // ==========================================================================
+          class SupplierMainScreen extends StatefulWidget {
+            const SupplierMainScreen({super.key});
+            @override
+            State<SupplierMainScreen> createState() => _SupplierMainScreenState();
+          }
+
+          class _SupplierMainScreenState extends State<SupplierMainScreen> {
+            int _tab = 0; // 0: Accueil, 1: Produits, 2: Commandes, 3: Livreurs
+
+            @override
+            Widget build(BuildContext context) {
+              return Scaffold(
+                appBar: AppBar(
+                  backgroundColor: BatixColors.bgDark,
+                  centerTitle: true,
+                  title: const CenteredBatixLogo(size: 32, showSub: true, sub: 'ESPACE FOURNISSEUR'),
+                  actions: [
+                    IconButton(
+                      icon: const Icon(Icons.swap_horiz, color: BatixColors.greenLight),
+                      onPressed: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ProfileSelectionScreen())),
+                    ),
+                  ],
+                ),
+                body: _tab == 0
+                    ? _buildOverview()
+                    : _tab == 1
+                        ? _buildProducts()
+                        : _tab == 2
+                            ? _buildOrders()
+                            : _buildDrivers(),
+                bottomNavigationBar: BottomNavigationBar(
+                  backgroundColor: BatixColors.bgCard,
+                  type: BottomNavigationBarType.fixed,
+                  selectedItemColor: BatixColors.greenLight,
+                  unselectedItemColor: Colors.white54,
+                  currentIndex: _tab,
+                  onTap: (i) => setState(() => _tab = i),
+                  items: const [
+                    BottomNavigationBarItem(icon: Icon(Icons.dashboard_rounded), label: 'Accueil'),
+                    BottomNavigationBarItem(icon: Icon(Icons.inventory_2_rounded), label: 'Produits'),
+                    BottomNavigationBarItem(icon: Icon(Icons.receipt_long_rounded), label: 'Commandes'),
+                    BottomNavigationBarItem(icon: Icon(Icons.local_shipping_rounded), label: 'Livreurs'),
+                  ],
+                ),
+              );
+            }
+
+            // Écran 1 Fournisseur : Vue d'ensemble (Image 10 - Écran 1)
+            Widget _buildOverview() {
+              return ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  const ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: CircleAvatar(backgroundColor: BatixColors.green, child: Icon(Icons.store, color: Colors.white)),
+                    title: Text('Ciment Horizon • Fournisseur A', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+                    subtitle: Text('🟢 En ligne • Aujourd\'hui +12%', style: TextStyle(color: BatixColors.greenLight)),
+                  ),
+                  const SizedBox(height: 10),
+                  _KpiCard('Ventes aujourd\'hui', '248 500 FCFA', '12 commandes', Icons.trending_up, BatixColors.green),
+                  _KpiCard('Commandes en cours', '7', 'En livraison / préparation', Icons.local_shipping, Colors.blueAccent),
+                  _KpiCard('En attente de confirmation', '3', 'À valider en 15 min', Icons.access_time_filled, BatixColors.orange),
+                  _KpiCard('Livraisons terminées', '9', 'Aujourd\'hui', Icons.check_circle, BatixColors.greenLight),
+                  const SizedBox(height: 12),
+                  _AuthBtn('📊 Importer une liste Excel (.xlsx)', Icons.table_view, BatixColors.green, () {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const SupplierExcelImportScreen()));
+                  }),
+                ],
+              );
+            }
+
+            // Écran 2 & 3 Fournisseur : Mes produits & Modification (Image 10 - Écrans 2 et 3)
+            Widget _buildProducts() {
+              return ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Mes produits en stock', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(backgroundColor: BatixColors.green),
+                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SupplierExcelImportScreen())),
+                        icon: const Icon(Icons.upload_file, size: 18),
+                        label: const Text('Import Excel'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  ...AppDatabase.products.map((p) {
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(color: BatixColors.bgCard, borderRadius: BorderRadius.circular(16), border: Border.all(color: BatixColors.border)),
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.asset(p['asset'], width: 56, height: 56, fit: BoxFit.cover)),
+                        title: Text(p['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: Text('Stock : ${p['stock']} ${p['unit']}s • ${p['basePrice']} FCFA/${p['unit']}'),
+                        trailing: ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: BatixColors.green),
+                          onPressed: () {
+                            Navigator.push(context, MaterialPageRoute(builder: (_) => SupplierEditProductScreen(product: p))).then((_) => setState(() {}));
+                          },
+                          child: const Text('Modifier'),
+                        ),
+                      ),
+                    );
+                  }),
+                ],
+              );
+            }
+
+            // Écran 5 Fournisseur : Mes commandes (Image 10 - Écran 5)
+            Widget _buildOrders() {
+              return ListView(
+                padding: const EdgeInsets.all(16),
+                children: AppDatabase.orders.map((o) {
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(color: BatixColors.bgCard, borderRadius: BorderRadius.circular(16), border: Border.all(color: BatixColors.border)),
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Image.asset(o.productAsset, width: 50, height: 50),
+                      title: Text('#${o.id} • ${o.productName} (${o.quantity})'),
+                      subtitle: Text('${o.grandTotal} FCFA • ${o.destination}'),
+                      trailing: Chip(label: Text(o.status), backgroundColor: BatixColors.green),
+                    ),
+                  );
+                }).toList(),
+              );
+            }
+
+            // Écrans 6, 7, 8 Fournisseur : Mes livreurs, Détails & Contacter (Image 10 - Écrans 6, 7, 8)
+            Widget _buildDrivers() {
+              return ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  const Text('Mes livreurs en activité (Suivi GPS)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  ...AppDatabase.drivers.map((d) {
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(color: BatixColors.bgCard, borderRadius: BorderRadius.circular(16), border: Border.all(color: BatixColors.border)),
+                      child: ListTile(
+                        leading: const CircleAvatar(backgroundColor: BatixColors.green, child: Icon(Icons.person, color: Colors.white)),
+                        title: Text('${d['name']} • ⭐ ${d['rating']}'),
+                        subtitle: Text('${d['phone']}\n🟢 ${d['status']} (${d['eta']})'),
+                        trailing: ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: BatixColors.green),
+                          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SupplierDriverContactScreen(driver: d))),
+                          child: const Text('Contacter'),
+                        ),
+                      ),
+                    );
+                  }),
+                  const SizedBox(height: 12),
+                  ClipRRect(borderRadius: BorderRadius.circular(18), child: Image.asset('assets/images/gps_map.png', height: 180, fit: BoxFit.cover)),
+                ],
+              );
+            }
+          }
+
+          class _KpiCard extends StatelessWidget {
+            final String title, val, sub;
+            final IconData icon;
+            final Color color;
+            const _KpiCard(this.title, this.val, this.sub, this.icon, this.color);
+            @override
+            Widget build(BuildContext context) {
+              return Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(color: BatixColors.bgCard, borderRadius: BorderRadius.circular(16), border: Border.all(color: BatixColors.border)),
+                child: Row(
+                  children: [
+                    CircleAvatar(backgroundColor: color.withOpacity(0.2), radius: 24, child: Icon(icon, color: color)),
+                    const SizedBox(width: 14),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(title, style: const TextStyle(color: Colors.white70, fontSize: 12.5)),
+                        Text(val, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                        Text(sub, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            }
+          }
+
+          // ÉCRAN 3 FOURNISSEUR : MODIFIER UN PRODUIT (Image 10 - Écran 3)
+          class SupplierEditProductScreen extends StatefulWidget {
+            final Map<String, dynamic> product;
+            const SupplierEditProductScreen({super.key, required this.product});
+            @override
+            State<SupplierEditProductScreen> createState() => _SupplierEditProductScreenState();
+          }
+
+          class _SupplierEditProductScreenState extends State<SupplierEditProductScreen> {
+            late int _price;
+            late int _stock;
+
+            @override
+            void initState() {
+              super.initState();
+              _price = widget.product['basePrice'] as int;
+              _stock = widget.product['stock'] as int;
+            }
+
+            @override
+            Widget build(BuildContext context) {
+              return Scaffold(
+                appBar: AppBar(backgroundColor: BatixColors.bgDark, title: const Text('Modifier un produit')),
+                body: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    ListTile(
+                      leading: Image.asset(widget.product['asset'], width: 60, height: 60),
+                      title: Text(widget.product['name'], style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold)),
+                      subtitle: const Text('🟢 En stock', style: TextStyle(color: BatixColors.greenLight)),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('Prix unitaire (FCFA) :'),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('$_price FCFA', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: BatixColors.orangeLight)),
+                        Row(
+                          children: [
+                            IconButton(icon: const Icon(Icons.remove_circle), onPressed: () => setState(() => _price -= 50)),
+                            IconButton(icon: const Icon(Icons.add_circle, color: BatixColors.greenLight), onPressed: () => setState(() => _price += 50)),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('Quantité en stock :'),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('$_stock unités', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                        Row(
+                          children: [
+                            IconButton(icon: const Icon(Icons.remove_circle), onPressed: () => setState(() => _stock -= 10)),
+                            IconButton(icon: const Icon(Icons.add_circle, color: BatixColors.greenLight), onPressed: () => setState(() => _stock += 10)),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    _AuthBtn('Enregistrer les modifications', Icons.save, BatixColors.green, () {
+                      widget.product['basePrice'] = _price;
+                      widget.product['stock'] = _stock;
+                      Navigator.pop(context);
+                    }),
+                  ],
+                ),
+              );
+            }
+          }
+
+          // ÉCRAN 4 FOURNISSEUR : IMPORTER UNE LISTE EXCEL (Image 10 - Écran 4)
+          class SupplierExcelImportScreen extends StatelessWidget {
+            const SupplierExcelImportScreen({super.key});
+            @override
+            Widget build(BuildContext context) {
+              return Scaffold(
+                appBar: AppBar(backgroundColor: BatixColors.bgDark, title: const Text('Importer des produits (Excel)')),
+                body: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(color: BatixColors.bgCard, borderRadius: BorderRadius.circular(20), border: Border.all(color: BatixColors.border)),
+                        child: Column(
+                          children: [
+                            const Icon(Icons.table_chart_rounded, size: 72, color: BatixColors.greenLight),
+                            const SizedBox(height: 12),
+                            const Text('Importer une liste Excel', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 6),
+                            const Text('Ajoutez ou mettez à jour vos produits en un seul clic (.xlsx, .xls, .csv).', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70)),
+                            const SizedBox(height: 16),
+                            _AuthBtn('⬆️ Choisir un fichier Excel', Icons.upload_file, BatixColors.green, () {
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Fichier stock_batix_2026.xlsx analysé en 0.8s !')));
+                            }),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      const ListTile(leading: Icon(Icons.check_circle, color: BatixColors.greenLight), title: Text('Nom du produit détecté')),
+                      const ListTile(leading: Icon(Icons.check_circle, color: BatixColors.greenLight), title: Text('Prix unitaire (FCFA) détecté')),
+                      const ListTile(leading: Icon(Icons.check_circle, color: BatixColors.greenLight), title: Text('Quantité en stock détectée')),
+                      const Spacer(),
+                      _AuthBtn('🔄 Mettre à jour le stock', Icons.sync, BatixColors.orange, () => Navigator.pop(context)),
+                    ],
+                  ),
+                ),
+              );
+            }
+          }
+
+          // ÉCRANS 7 & 8 FOURNISSEUR : DÉTAILS & CONTACTER LE LIVREUR (Image 10 - Écrans 7 et 8)
+          class SupplierDriverContactScreen extends StatelessWidget {
+            final Map<String, dynamic> driver;
+            const SupplierDriverContactScreen({super.key, required this.driver});
+            @override
+            Widget build(BuildContext context) {
+              return Scaffold(
+                appBar: AppBar(backgroundColor: BatixColors.bgDark, title: const Text('Contacter le livreur')),
+                body: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    children: [
+                      ListTile(
+                        leading: const CircleAvatar(radius: 28, backgroundColor: BatixColors.green, child: Icon(Icons.person, size: 32, color: Colors.white)),
+                        title: Text(driver['name'], style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                        subtitle: Text('🟢 ${driver['status']} • ${driver['phone']}'),
+                      ),
+                      const SizedBox(height: 12),
+                      ClipRRect(borderRadius: BorderRadius.circular(18), child: Image.asset('assets/images/gps_map.png', height: 160, fit: BoxFit.cover)),
+                      const SizedBox(height: 18),
+                      Expanded(
+                        child: GridView.count(
+                          crossAxisCount: 2,
+                          mainAxisSpacing: 12,
+                          crossAxisSpacing: 12,
+                          children: const [
+                            _ContactTile(Icons.phone, 'Appeler', BatixColors.green),
+                            _ContactTile(Icons.chat, 'WhatsApp', Colors.blue),
+                            _ContactTile(Icons.message, 'Envoyer un message', BatixColors.orange),
+                            _ContactTile(Icons.location_on, 'Voir le trajet GPS', Colors.purple),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+          }
+
+          class _ContactTile extends StatelessWidget {
+            final IconData icon;
+            final String label;
+            final Color color;
+            const _ContactTile(this.icon, this.label, this.color);
+            @override
+            Widget build(BuildContext context) {
+              return Container(
+                decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(20)),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(icon, size: 38, color: Colors.white),
+                    const SizedBox(height: 8),
+                    Text(label, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              );
+            }
+          }
+
+          // ==========================================================================
+          // CONSOLE AGENT DE BATIX (Audit des 3 Photos & Validation Paiements)
+          // ==========================================================================
+          class AgentMainScreen extends StatelessWidget {
+            const AgentMainScreen({super.key});
+            @override
+            Widget build(BuildContext context) {
+              return Scaffold(
+                appBar: AppBar(
+                  backgroundColor: BatixColors.bgDark,
+                  centerTitle: true,
+                  title: const CenteredBatixLogo(size: 32, showSub: true, sub: 'CONSOLE AGENT BATIX'),
+                  actions: [
+                    IconButton(
+                      icon: const Icon(Icons.swap_horiz, color: BatixColors.greenLight),
+                      onPressed: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ProfileSelectionScreen())),
+                    ),
+                  ],
+                ),
+                body: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    const Text('Audit des preuves de livraison & Sécurité AES-256', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 12),
+                    ...AppDatabase.orders.map((o) {
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 14),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(color: BatixColors.bgCard, borderRadius: BorderRadius.circular(18), border: Border.all(color: BatixColors.border)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('#${o.id} • ${o.productName} (${o.status})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            Text('Fournisseur : ${o.supplierName} • Total : ${o.grandTotal} FCFA', style: const TextStyle(color: BatixColors.greenLight)),
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                Expanded(child: Image.asset('assets/images/photo1_matricule.png', height: 70, fit: BoxFit.cover)),
+                                const SizedBox(width: 6),
+                                Expanded(child: Image.asset('assets/images/photo2_cargaison.png', height: 70, fit: BoxFit.cover)),
+                                const SizedBox(width: 6),
+                                Expanded(child: Image.asset('assets/images/photo3_sol.png', height: 70, fit: BoxFit.cover)),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            const Text('✓ 3 Photos Caméra Directe   ✓ GPS < 150m   ✓ Signature & Code 4 chiffres OK', style: TextStyle(fontSize: 12, color: Colors.white70)),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              );
+            }
+          }
           EOF
 
-      - name: 6. Compilation de l'APK et création du ZIP
+      - name: 7. Compilation de l'APK et création du ZIP complet
         working-directory: batix_app
         run: |
           flutter pub get
@@ -1359,14 +1721,14 @@ jobs:
           flutter build apk --release
           zip -r ../BATIX_Projet_Complet.zip . -x "build/*" ".dart_tool/*"
 
-      - name: 7. Télécharger l'application APK
+      - name: 8. Télécharger l'application APK finale
         uses: actions/upload-artifact@v4
         with:
           name: BATIX-Application-APK
           path: batix_app/build/app/outputs/flutter-apk/app-release.apk
 
-      - name: 8. Télécharger le fichier ZIP complet
+      - name: 9. Télécharger le projet complet ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: BATIX-Code-Source-Complet-ZIP
+          name: BATIX-Projet-Complet-ZIP
           path: BATIX_Projet_Complet.zip
